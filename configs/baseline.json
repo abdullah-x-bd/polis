@@ -1,0 +1,8 @@
+{
+  "experiment": "unsafe_delegation",
+  "regime": "no_governance",
+  "trials": 100,
+  "restricted_share": 0.5,
+  "prompt_compliance_probability": 0.0,
+  "seed": 20260731
+}

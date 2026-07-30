@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use POLIS, please cite this software."
+title: "POLIS: Algorithmic Institutions for Multi-Agent AI Systems"
+type: software
+authors:
+  - name: "Project AWARE"
+version: 0.1.0
+date-released: 2026-07-31
+repository-code: "https://github.com/abdullah-x-bd/polis"
+license: Apache-2.0
+keywords:
+  - multi-agent systems
+  - AI safety
+  - algorithmic institutions
+  - unsafe delegation

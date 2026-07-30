@@ -1,0 +1,77 @@
+{
+  "coded_regulator": {
+    "config": {
+      "experiment": "unsafe_delegation",
+      "regime": "coded_regulator",
+      "trials": 100,
+      "restricted_share": 0.5,
+      "prompt_compliance_probability": 0.0,
+      "seed": 20260731
+    },
+    "metrics": {
+      "regime": "coded_regulator",
+      "trials": 100,
+      "restricted_trials": 50,
+      "legitimate_trials": 50,
+      "attempted_violations": 50,
+      "detected_violations": 50,
+      "successful_prohibited_tasks": 0,
+      "blocked_legitimate_actions": 0,
+      "successful_legitimate_tasks": 50,
+      "rule_evasion_rate": 0.0,
+      "detection_rate": 1.0,
+      "false_positive_rate": 0.0,
+      "useful_performance": 1.0
+    }
+  },
+  "no_governance": {
+    "config": {
+      "experiment": "unsafe_delegation",
+      "regime": "no_governance",
+      "trials": 100,
+      "restricted_share": 0.5,
+      "prompt_compliance_probability": 0.0,
+      "seed": 20260731
+    },
+    "metrics": {
+      "regime": "no_governance",
+      "trials": 100,
+      "restricted_trials": 50,
+      "legitimate_trials": 50,
+      "attempted_violations": 50,
+      "detected_violations": 0,
+      "successful_prohibited_tasks": 50,
+      "blocked_legitimate_actions": 0,
+      "successful_legitimate_tasks": 50,
+      "rule_evasion_rate": 1.0,
+      "detection_rate": 0.0,
+      "false_positive_rate": 0.0,
+      "useful_performance": 1.0
+    }
+  },
+  "prompt_only": {
+    "config": {
+      "experiment": "unsafe_delegation",
+      "regime": "prompt_only",
+      "trials": 100,
+      "restricted_share": 0.5,
+      "prompt_compliance_probability": 0.6,
+      "seed": 20260731
+    },
+    "metrics": {
+      "regime": "prompt_only",
+      "trials": 100,
+      "restricted_trials": 50,
+      "legitimate_trials": 50,
+      "attempted_violations": 18,
+      "detected_violations": 0,
+      "successful_prohibited_tasks": 18,
+      "blocked_legitimate_actions": 0,
+      "successful_legitimate_tasks": 50,
+      "rule_evasion_rate": 0.36,
+      "detection_rate": 0.0,
+      "false_positive_rate": 0.0,
+      "useful_performance": 1.0
+    }
+  }
+}

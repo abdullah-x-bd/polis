@@ -1,0 +1,4 @@
+regime,trials,rule_evasion_rate,detection_rate,false_positive_rate,useful_performance
+coded_regulator,100,0.0,1.0,0.0,1.0
+no_governance,100,1.0,0.0,0.0,1.0
+prompt_only,100,0.36,0.0,0.0,1.0
