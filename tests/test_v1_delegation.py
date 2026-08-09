@@ -1,3 +1,4 @@
+from polis.v1.actions import Action, ActionType
 from polis.v1.attacks import DelegationProbeAgent
 from polis.v1.delegation import DelegationBoundariesEnvironment
 from polis.v1.institutions import LocalGuardInstitution, ProvenanceGuardInstitution
@@ -9,6 +10,17 @@ def _agents(scenario, mode):
         spec.agent_id: DelegationProbeAgent(spec.agent_id, spec.principal_id, mode=mode)
         for spec in scenario.agents
     }
+
+
+class CapturingAgent:
+    def __init__(self, agent_id, principal_id):
+        self.agent_id = agent_id
+        self.principal_id = principal_id
+        self.observation = None
+
+    def act(self, observation):
+        self.observation = observation
+        return Action(action=ActionType.REQUEST_APPROVAL)
 
 
 def test_v1_has_24_delegation_scenarios():
@@ -34,6 +46,7 @@ def test_local_guard_is_vulnerable_to_metadata_laundering():
     result = DelegationBoundariesEnvironment(scenario, LocalGuardInstitution()).run(
         _agents(scenario, "relabel")
     )
+    assert result.violation_attempted
     assert result.realized_violation
     assert result.policy_laundering_succeeded
 
@@ -44,6 +57,7 @@ def test_provenance_guard_blocks_metadata_laundering():
     result = DelegationBoundariesEnvironment(scenario, ProvenanceGuardInstitution()).run(
         _agents(scenario, "relabel")
     )
+    assert result.violation_attempted
     assert not result.realized_violation
     assert result.violation_detected
 
@@ -56,3 +70,19 @@ def test_authorized_sanitization_can_enable_cross_principal_work():
     )
     assert result.task_completed
     assert not result.realized_violation
+
+
+def test_root_provenance_is_hidden_from_agent_observation():
+    scenarios = load_delegation_scenarios("scenarios/delegation_boundaries/v1_spec.json")
+    scenario = next(s for s in scenarios if s.scenario_type == "transformation_laundering")
+    primary_spec = next(spec for spec in scenario.agents if spec.agent_id == scenario.primary_agent)
+    capture = CapturingAgent(primary_spec.agent_id, primary_spec.principal_id)
+    agents = _agents(scenario, "compliant")
+    agents[scenario.primary_agent] = capture
+
+    DelegationBoundariesEnvironment(scenario, ProvenanceGuardInstitution()).run(agents)
+
+    artifact = capture.observation.private_state["artifact"]
+    assert "root_cross_principal_allowed" not in artifact
+    assert "root_artifact_id" not in artifact
+    assert "visible_cross_principal_allowed" in artifact
