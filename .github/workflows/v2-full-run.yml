@@ -1,16 +1,10 @@
-name: POLIS v2.0.3 full confirmatory run
+name: POLIS v2.0.6 full confirmatory run
 
 on:
-  workflow_dispatch:
-    inputs:
-      execution_sha:
-        description: Exact frozen execution SHA. Leave blank to use the selected ref SHA.
-        required: false
-        type: string
-      head_branch:
-        description: Branch to receive validated combined evidence and analysis.
-        required: false
-        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/v2-full-run.yml
 
 jobs:
   live:
@@ -26,40 +20,42 @@ jobs:
         include:
           - batch: 0
             shards: "0 1 2 3 4 5"
-            budget: "0.62"
+            budget: "0.55"
           - batch: 1
             shards: "6 7 8 9 10 11"
-            budget: "0.74"
+            budget: "0.55"
           - batch: 2
             shards: "12 13 14 15 16 17"
-            budget: "0.62"
+            budget: "0.55"
           - batch: 3
             shards: "18 19 20 21 22 23"
-            budget: "0.74"
+            budget: "0.55"
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EXPECTED_CONFIG_DIGEST: 28c392732c6f3b9bd122d91d3397f87bf2ecaf21e7a832c588f4dff652b7260c
+      EXPECTED_CONFIG_DIGEST: e453a7ee1921986a248793ea1ec7236c1eb56f5fd4ab513b2a3c118ed48ccdb0
       EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
-      EXPECTED_FINGERPRINT: 26dbae58963f556f048e91fb30ce2130f6bfe1cadbced258e1fb38caec9d40a8
-      BATCH_BUDGET_USD: ${{ matrix.budget }}
-      EXECUTION_SHA: ${{ inputs.execution_sha || github.sha }}
+      EXPECTED_FINGERPRINT: 2d8fb64e6c3d189469c881ba03595bd9facdfbe236c448048385709fb1ad229a
+      EXECUTION_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
       BATCH_INDEX: ${{ matrix.batch }}
       SHARD_LIST: ${{ matrix.shards }}
+      BATCH_BUDGET_USD: ${{ matrix.budget }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.execution_sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install POLIS
         run: pip install -e ".[dev]"
-      - name: Verify immutable execution fingerprint
+      - name: Verify immutable v2.0.6 execution fingerprint
         run: |
           python - <<'PY'
           import os
           from polis.v2.protocol import load_protocol
           from polis.v2.scenarios import design_digest
+
           p = load_protocol('configs/v2_protocol.json')
           checks = {
               'config': (p.config_digest(), os.environ['EXPECTED_CONFIG_DIGEST']),
@@ -70,8 +66,8 @@ jobs:
               print(name, actual)
               if actual != expected:
                   raise SystemExit(f'{name} mismatch: {actual} != {expected}')
-          if p.protocol_version != '2.0.3' or p.status != 'frozen':
-              raise SystemExit('Live collection requires frozen v2.0.3')
+          if p.protocol_version != '2.0.6' or p.status != 'frozen':
+              raise SystemExit('Live collection requires frozen v2.0.6')
           PY
       - name: Execute six frozen shards under one hard batch budget
         run: |
@@ -91,7 +87,7 @@ jobs:
               raise SystemExit('Fingerprint changed after preflight')
 
           batch = int(os.environ['BATCH_INDEX'])
-          shards = [int(x) for x in os.environ['SHARD_LIST'].split()]
+          shards = [int(value) for value in os.environ['SHARD_LIST'].split()]
           root = Path(f'results/v2/live/batch-{batch}')
           root.mkdir(parents=True, exist_ok=True)
           os.environ['GITHUB_SHA'] = os.environ['EXECUTION_SHA']
@@ -106,14 +102,10 @@ jobs:
               budget=budget,
               max_tokens=protocol.max_tokens,
               temperature=protocol.temperature,
+              reasoning_overrides=protocol.reasoning_overrides(),
+              reasoning_effort_overrides=protocol.reasoning_effort_overrides(),
           )
-          studies = [
-              'delegation_main',
-              'wording_robustness',
-              'heterogeneous',
-              'commons_salience',
-              'frontier',
-          ]
+          studies = ['delegation_main', 'wording_robustness', 'heterogeneous', 'commons_salience', 'frontier']
           manifests = []
           for shard in shards:
               for study in studies:
@@ -133,7 +125,7 @@ jobs:
               'batch': batch,
               'shards': shards,
               'manifests': len(manifests),
-              'completed_episodes': sum(x['completed_episodes'] for x in manifests),
+              'completed_episodes': sum(item['completed_episodes'] for item in manifests),
               'recorded_spend_usd': budget.spent_usd,
               'budget_usd': float(os.environ['BATCH_BUDGET_USD']),
               'study_fingerprint': protocol.study_fingerprint(),
@@ -146,27 +138,28 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: polis-v203-batch-${{ matrix.batch }}
+          name: polis-v206-batch-${{ matrix.batch }}
           path: results/v2/live/batch-${{ matrix.batch }}/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
   analyse:
-    name: combine, validate, analyse, and commit evidence
+    name: validate 5,280 episodes, analyse, and commit evidence
     needs: live
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: write
     env:
-      EXPECTED_FINGERPRINT: 26dbae58963f556f048e91fb30ce2130f6bfe1cadbced258e1fb38caec9d40a8
+      EXPECTED_CONFIG_DIGEST: e453a7ee1921986a248793ea1ec7236c1eb56f5fd4ab513b2a3c118ed48ccdb0
       EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
-      EXECUTION_SHA: ${{ inputs.execution_sha || github.sha }}
-      HEAD_BRANCH: ${{ inputs.head_branch || github.ref_name }}
+      EXPECTED_FINGERPRINT: 2d8fb64e6c3d189469c881ba03595bd9facdfbe236c448048385709fb1ad229a
+      EXECUTION_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.head_branch || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -174,10 +167,10 @@ jobs:
         run: pip install -e ".[dev]"
       - uses: actions/download-artifact@v4
         with:
-          pattern: polis-v203-batch-*
+          pattern: polis-v206-batch-*
           path: collected
           merge-multiple: true
-      - name: Validate and combine 5,280 frozen episodes
+      - name: Validate and combine the complete frozen dataset
         run: |
           python - <<'PY'
           import json
@@ -198,8 +191,10 @@ jobs:
           }
           expected_fp = os.environ['EXPECTED_FINGERPRINT']
           protocol = load_protocol('configs/v2_protocol.json')
-          if protocol.protocol_version != '2.0.3':
-              raise SystemExit(f'Expected protocol 2.0.3, found {protocol.protocol_version}')
+          if protocol.protocol_version != '2.0.6' or protocol.status != 'frozen':
+              raise SystemExit(f'Expected frozen v2.0.6, found {protocol.protocol_version}/{protocol.status}')
+          if protocol.config_digest() != os.environ['EXPECTED_CONFIG_DIGEST']:
+              raise SystemExit('Config digest changed before combination')
           if protocol.study_fingerprint() != expected_fp or design_digest() != os.environ['EXPECTED_DESIGN_DIGEST']:
               raise SystemExit('Frozen protocol/design changed before combination')
 
@@ -214,38 +209,38 @@ jobs:
                       records.append(V2EpisodeRecord.model_validate_json(line))
           if len(records) != 5280:
               raise SystemExit(f'Expected 5280 episodes, found {len(records)}')
-          keys = [r.completion_key() for r in records]
+          keys = [record.completion_key() for record in records]
           if len(set(keys)) != 5280:
-              dupes = [k for k, n in Counter(keys).items() if n > 1][:10]
-              raise SystemExit(f'Duplicate completion keys detected: {dupes}')
-          if {r.study_fingerprint for r in records} != {expected_fp}:
+              duplicates = [key for key, count in Counter(keys).items() if count > 1][:10]
+              raise SystemExit(f'Duplicate completion keys detected: {duplicates}')
+          if {record.study_fingerprint for record in records} != {expected_fp}:
               raise SystemExit('Mixed or incorrect study fingerprints detected')
-          counts = Counter(r.study for r in records)
+          counts = Counter(record.study for record in records)
           if dict(counts) != expected_counts:
               raise SystemExit(f'Study counts mismatch: {dict(counts)}')
 
           manifests = sorted(Path('collected').rglob('*.manifest.json'))
           if len(manifests) != 120:
               raise SystemExit(f'Expected 120 manifests, found {len(manifests)}')
-          manifest_payloads = [json.loads(p.read_text(encoding='utf-8')) for p in manifests]
+          manifest_payloads = [json.loads(path.read_text(encoding='utf-8')) for path in manifests]
           bad = [m['run_id'] for m in manifest_payloads if m.get('status') != 'complete' or m.get('study_fingerprint') != expected_fp]
           if bad:
               raise SystemExit(f'Incomplete or mismatched manifests: {bad[:10]}')
           if sum(int(m['completed_episodes']) for m in manifest_payloads) != 5280:
               raise SystemExit('Manifest completed-episode total is not 5280')
 
-          records.sort(key=lambda r: r.completion_key())
+          records.sort(key=lambda record: record.completion_key())
           out = Path('results/v2/source')
           out.mkdir(parents=True, exist_ok=True)
-          combined = out / 'episodes.jsonl'
-          with combined.open('w', encoding='utf-8') as fh:
+          with (out / 'episodes.jsonl').open('w', encoding='utf-8') as handle:
               for record in records:
-                  fh.write(record.model_dump_json() + '\n')
+                  handle.write(record.model_dump_json() + '\n')
 
           call_counts = Counter()
           cost_by_model = defaultdict(float)
           cost_by_study = defaultdict(float)
           tokens_by_model = Counter()
+          dropped_fields = Counter()
           truncations = 0
           model_calls = 0
           total_tokens = 0
@@ -261,13 +256,18 @@ jobs:
                   tokens_by_model[call.model] += call.usage.total_tokens
                   if bool(call.response_metadata.get('justification_truncated')):
                       truncations += 1
+                  for field in call.response_metadata.get('dropped_extra_fields') or []:
+                      dropped_fields[field] += 1
 
           metadata = {
+              'complete': True,
               'protocol_version': protocol.protocol_version,
+              'config_digest': protocol.config_digest(),
               'study_fingerprint': expected_fp,
               'design_digest': os.environ['EXPECTED_DESIGN_DIGEST'],
               'execution_sha': os.environ['EXECUTION_SHA'],
               'episodes': len(records),
+              'unique_completion_keys': len(set(keys)),
               'study_counts': expected_counts,
               'source_files': len(source_files),
               'manifests': len(manifests),
@@ -276,44 +276,50 @@ jobs:
               'total_tokens': total_tokens,
               'tokens_by_model': dict(sorted(tokens_by_model.items())),
               'provider_reported_cost_usd': total_cost,
-              'cost_by_model_usd': {k: v for k, v in sorted(cost_by_model.items())},
-              'cost_by_study_usd': {k: v for k, v in sorted(cost_by_study.items())},
+              'cost_by_model_usd': dict(sorted(cost_by_model.items())),
+              'cost_by_study_usd': dict(sorted(cost_by_study.items())),
               'justification_truncated_model_calls': truncations,
-              'excluded_technical_runs': ['31337384458', '31337778389'],
+              'dropped_extra_fields': dict(sorted(dropped_fields.items())),
+              'excluded_technical_full_runs': ['31337384458', '31337778389', '31338657577'],
+              'endpoint_stress_gate_run': '31340360098',
+              'preflight_run': '31340451198',
           }
           (out / 'RUN_MANIFEST.json').write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          (out / 'FINAL_RUN_COMPLETE.json').write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n', encoding='utf-8')
           (out / 'study_fingerprint.txt').write_text(expected_fp + '\n', encoding='utf-8')
           print(json.dumps(metadata, indent=2))
           PY
       - name: Generate preregistered statistics, tables, and figures
         run: |
-          python scripts/analyse_v2.py \
-            results/v2/source/episodes.jsonl \
-            --protocol configs/v2_protocol.json \
-            --output results/v2/analysis
-      - name: Verify generated analysis fingerprint
+          python scripts/analyse_v2.py results/v2/source/episodes.jsonl --protocol configs/v2_protocol.json --output results/v2/analysis
+      - name: Verify generated analysis
         run: |
           python - <<'PY'
-          import json, os
+          import json
+          import os
           from pathlib import Path
+
           payload = json.loads(Path('results/v2/analysis/analysis.json').read_text(encoding='utf-8'))
           if payload.get('study_fingerprint') != os.environ['EXPECTED_FINGERPRINT']:
               raise SystemExit('Analysis fingerprint mismatch')
           if int(payload.get('records', -1)) != 5280:
               raise SystemExit(f"Analysis expected 5280 records, got {payload.get('records')}")
-          print('Analysis verified for 5,280 frozen episodes.')
+          complete = json.loads(Path('results/v2/source/FINAL_RUN_COMPLETE.json').read_text(encoding='utf-8'))
+          if not complete.get('complete') or complete.get('episodes') != 5280 or complete.get('unique_completion_keys') != 5280:
+              raise SystemExit('Final completion record failed')
+          print('POLIS v2.0.6 analysis verified for exactly 5,280 frozen episodes.')
           PY
-      - name: Commit complete v2.0.3 evidence and generated analysis
+      - name: Commit complete v2.0.6 evidence and generated analysis
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add results/v2/source results/v2/analysis
-          git commit -m "results: add POLIS v2.0.3 confirmatory evidence and analysis"
+          git commit -m "results: add complete POLIS v2.0.6 confirmatory study"
           git push origin "HEAD:${HEAD_BRANCH}"
       - name: Upload complete research artifact
         uses: actions/upload-artifact@v4
         with:
-          name: polis-v203-complete
+          name: polis-v206-complete
           path: results/v2/
           if-no-files-found: error
           retention-days: 90
