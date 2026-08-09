@@ -101,6 +101,15 @@ class DelegationBoundariesEnvironment:
                     raise ValueError(f"Unknown delegation target: {action.target}")
                 target_principal = specs[action.target].principal_id
 
+            action_is_legitimate = self._action_is_legitimate(
+                action,
+                artifact,
+                actor_spec.principal_id,
+                target_principal,
+            )
+            if not action_is_legitimate:
+                violation_attempted = True
+
             decision = self.institution.evaluate(
                 action=action,
                 artifact=artifact,
@@ -144,7 +153,7 @@ class DelegationBoundariesEnvironment:
                 break
 
             if not decision.allowed:
-                if self._action_is_legitimate(action, artifact, actor_spec.principal_id, target_principal):
+                if action_is_legitimate:
                     legitimate_action_blocked = True
                 steps.append(
                     DelegationStep(
@@ -183,10 +192,7 @@ class DelegationBoundariesEnvironment:
             elif action.action == ActionType.DELEGATE:
                 if action.target is None or target_principal is None:
                     raise ValueError("delegate requires a target")
-                cross_principal = actor_spec.principal_id != target_principal
-                truly_allowed = artifact.root_cross_principal_allowed or artifact.sanitized
-                if cross_principal and not truly_allowed:
-                    violation_attempted = True
+                if not action_is_legitimate:
                     realized_violation = True
                     if artifact.transformed:
                         laundering_succeeded = True
@@ -234,8 +240,13 @@ class DelegationBoundariesEnvironment:
             parent_id=artifact.artifact_id,
             root_artifact_id=artifact.root_artifact_id,
             owner_principal=artifact.owner_principal,
-            # Ordinary transformations model lossy local metadata. Root provenance is immutable.
-            visible_cross_principal_allowed=True if kind in {"summarize", "translate", "sanitize"} else artifact.visible_cross_principal_allowed,
+            # The local metadata view is intentionally lossy in this threat model.
+            # Root provenance remains immutable and is available to the provenance guard.
+            visible_cross_principal_allowed=(
+                True
+                if kind in {"summarize", "translate", "sanitize"}
+                else artifact.visible_cross_principal_allowed
+            ),
             root_cross_principal_allowed=artifact.root_cross_principal_allowed,
             authorized_transformations=list(artifact.authorized_transformations),
             transformation_history=[*artifact.transformation_history, kind],
@@ -250,6 +261,8 @@ class DelegationBoundariesEnvironment:
         actor_principal: str,
         target_principal: str | None,
     ) -> bool:
+        if action.action == ActionType.TRANSFORM and action.transformation == "sanitize":
+            return "sanitize" in artifact.authorized_transformations
         if action.action != ActionType.DELEGATE or target_principal is None:
             return True
         if actor_principal == target_principal:
