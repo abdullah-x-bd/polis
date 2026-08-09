@@ -11,13 +11,23 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .scenarios import design_digest
 
+ReasoningEffort = Literal["max", "xhigh", "high", "medium", "low", "minimal", "none"]
+
 
 class ModelSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     id: str
     family: str
     provider_family: str
     reasoning_enabled: bool | None = None
+    reasoning_effort: ReasoningEffort | None = None
+
+    @model_validator(mode="after")
+    def _validate_reasoning_control(self) -> ModelSpec:
+        if self.reasoning_enabled is not None and self.reasoning_effort is not None:
+            raise ValueError("Specify either reasoning_enabled or reasoning_effort for a model, not both")
+        return self
 
 
 class V2Protocol(BaseModel):
@@ -59,11 +69,19 @@ class V2Protocol(BaseModel):
         return self.model_dump(mode="json")
 
     def reasoning_overrides(self) -> dict[str, bool]:
-        """Return only explicitly frozen per-model reasoning controls."""
+        """Return explicitly frozen per-model boolean reasoning controls."""
         return {
             item.id: item.reasoning_enabled
             for item in [*self.cheap_models, *self.frontier_models]
             if item.reasoning_enabled is not None
+        }
+
+    def reasoning_effort_overrides(self) -> dict[str, ReasoningEffort]:
+        """Return explicitly frozen per-model reasoning-effort controls."""
+        return {
+            item.id: item.reasoning_effort
+            for item in [*self.cheap_models, *self.frontier_models]
+            if item.reasoning_effort is not None
         }
 
     def config_digest(self) -> str:
