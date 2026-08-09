@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: OpenRouter model slug
+        description: Frozen OpenRouter model slug
         required: true
-        default: openai/gpt-oss-120b
+        default: google/gemini-2.5-flash-lite
+      confirmation:
+        description: Type RUN_ROTATED_KEY to confirm OPENROUTER_API_KEY has been rotated since any exposure
+        required: true
+        default: ""
 
 jobs:
   smoke:
@@ -23,13 +27,17 @@ jobs:
           python-version: "3.11"
       - name: Install POLIS
         run: pip install -e ".[dev]"
-      - name: Verify secret exists
+      - name: Verify explicit paid-run gate
         run: |
+          if [ "${{ inputs.confirmation }}" != "RUN_ROTATED_KEY" ]; then
+            echo "Refusing paid smoke test until the key-rotation confirmation is supplied."
+            exit 1
+          fi
           python - <<'PY'
           import os
           if not os.getenv("OPENROUTER_API_KEY"):
               raise SystemExit("OPENROUTER_API_KEY repository secret is not configured")
-          print("OPENROUTER_API_KEY is configured")
+          print("OpenRouter secret is configured; secret value is not printed.")
           PY
       - name: Run one structured-action request
         run: python scripts/test_openrouter.py --model "${{ inputs.model }}" --max-cost-usd 0.25
