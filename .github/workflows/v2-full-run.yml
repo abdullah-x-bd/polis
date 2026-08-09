@@ -1,16 +1,10 @@
-name: POLIS v2.0.2 full confirmatory run
+name: POLIS v2.0.3 full confirmatory run
 
 on:
-  workflow_dispatch:
-    inputs:
-      execution_sha:
-        description: Exact frozen execution SHA. Leave blank to use the selected ref SHA.
-        required: false
-        type: string
-      head_branch:
-        description: Branch to receive validated combined evidence and analysis.
-        required: false
-        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/v2-full-run.yml
 
 jobs:
   live:
@@ -26,25 +20,29 @@ jobs:
         include:
           - batch: 0
             shards: "0 1 2 3 4 5"
+            budget: "0.62"
           - batch: 1
             shards: "6 7 8 9 10 11"
+            budget: "0.74"
           - batch: 2
             shards: "12 13 14 15 16 17"
+            budget: "0.62"
           - batch: 3
             shards: "18 19 20 21 22 23"
+            budget: "0.74"
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EXPECTED_CONFIG_DIGEST: b947c916ace60ae3e64f5ca047b9bb10b10ce02b6151badd2c248838387e1aa5
+      EXPECTED_CONFIG_DIGEST: 28c392732c6f3b9bd122d91d3397f87bf2ecaf21e7a832c588f4dff652b7260c
       EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
-      EXPECTED_FINGERPRINT: e49d69fb88fed250268aba7d9e9912b98bbb07cacbc114a1a0ba05e4480e44f2
-      BATCH_BUDGET_USD: "0.90"
-      EXECUTION_SHA: ${{ inputs.execution_sha || github.sha }}
+      EXPECTED_FINGERPRINT: 26dbae58963f556f048e91fb30ce2130f6bfe1cadbced258e1fb38caec9d40a8
+      BATCH_BUDGET_USD: ${{ matrix.budget }}
+      EXECUTION_SHA: ${{ github.event.pull_request.head.sha }}
       BATCH_INDEX: ${{ matrix.batch }}
       SHARD_LIST: ${{ matrix.shards }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.execution_sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -66,8 +64,8 @@ jobs:
               print(name, actual)
               if actual != expected:
                   raise SystemExit(f'{name} mismatch: {actual} != {expected}')
-          if p.protocol_version != '2.0.2' or p.status != 'frozen':
-              raise SystemExit('Live collection requires frozen v2.0.2')
+          if p.protocol_version != '2.0.3' or p.status != 'frozen':
+              raise SystemExit('Live collection requires frozen v2.0.3')
           PY
       - name: Execute six frozen shards under one hard batch budget
         run: |
@@ -142,7 +140,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: polis-v2-batch-${{ matrix.batch }}
+          name: polis-v203-batch-${{ matrix.batch }}
           path: results/v2/live/batch-${{ matrix.batch }}/
           if-no-files-found: error
           retention-days: 30
@@ -155,14 +153,14 @@ jobs:
     permissions:
       contents: write
     env:
-      EXPECTED_FINGERPRINT: e49d69fb88fed250268aba7d9e9912b98bbb07cacbc114a1a0ba05e4480e44f2
+      EXPECTED_FINGERPRINT: 26dbae58963f556f048e91fb30ce2130f6bfe1cadbced258e1fb38caec9d40a8
       EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
-      EXECUTION_SHA: ${{ inputs.execution_sha || github.sha }}
-      HEAD_BRANCH: ${{ inputs.head_branch || github.ref_name }}
+      EXECUTION_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.head_branch || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -170,7 +168,7 @@ jobs:
         run: pip install -e ".[dev]"
       - uses: actions/download-artifact@v4
         with:
-          pattern: polis-v2-batch-*
+          pattern: polis-v203-batch-*
           path: collected
           merge-multiple: true
       - name: Validate and combine 5,280 frozen episodes
@@ -178,7 +176,7 @@ jobs:
           python - <<'PY'
           import json
           import os
-          from collections import Counter
+          from collections import Counter, defaultdict
           from pathlib import Path
 
           from polis.v2.live import V2EpisodeRecord
@@ -194,6 +192,8 @@ jobs:
           }
           expected_fp = os.environ['EXPECTED_FINGERPRINT']
           protocol = load_protocol('configs/v2_protocol.json')
+          if protocol.protocol_version != '2.0.3':
+              raise SystemExit(f'Expected protocol 2.0.3, found {protocol.protocol_version}')
           if protocol.study_fingerprint() != expected_fp or design_digest() != os.environ['EXPECTED_DESIGN_DIGEST']:
               raise SystemExit('Frozen protocol/design changed before combination')
 
@@ -236,9 +236,26 @@ jobs:
               for record in records:
                   fh.write(record.model_dump_json() + '\n')
 
-          model_calls = sum(len(r.model_calls) for r in records)
-          total_tokens = sum(r.episode_tokens for r in records)
-          total_cost = sum(r.episode_cost_usd for r in records)
+          call_counts = Counter()
+          cost_by_model = defaultdict(float)
+          cost_by_study = defaultdict(float)
+          tokens_by_model = Counter()
+          truncations = 0
+          model_calls = 0
+          total_tokens = 0
+          total_cost = 0.0
+          for record in records:
+              cost_by_study[record.study] += record.episode_cost_usd
+              total_tokens += record.episode_tokens
+              total_cost += record.episode_cost_usd
+              for call in record.model_calls:
+                  model_calls += 1
+                  call_counts[call.model] += 1
+                  cost_by_model[call.model] += call.usage.cost_usd
+                  tokens_by_model[call.model] += call.usage.total_tokens
+                  if bool(call.response_metadata.get('justification_truncated')):
+                      truncations += 1
+
           metadata = {
               'protocol_version': protocol.protocol_version,
               'study_fingerprint': expected_fp,
@@ -249,8 +266,14 @@ jobs:
               'source_files': len(source_files),
               'manifests': len(manifests),
               'model_calls': model_calls,
+              'model_call_counts': dict(sorted(call_counts.items())),
               'total_tokens': total_tokens,
+              'tokens_by_model': dict(sorted(tokens_by_model.items())),
               'provider_reported_cost_usd': total_cost,
+              'cost_by_model_usd': {k: v for k, v in sorted(cost_by_model.items())},
+              'cost_by_study_usd': {k: v for k, v in sorted(cost_by_study.items())},
+              'justification_truncated_model_calls': truncations,
+              'excluded_technical_runs': ['31337384458', '31337778389'],
           }
           (out / 'RUN_MANIFEST.json').write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n', encoding='utf-8')
           (out / 'study_fingerprint.txt').write_text(expected_fp + '\n', encoding='utf-8')
@@ -274,17 +297,17 @@ jobs:
               raise SystemExit(f"Analysis expected 5280 records, got {payload.get('records')}")
           print('Analysis verified for 5,280 frozen episodes.')
           PY
-      - name: Commit complete v2 evidence and generated analysis
+      - name: Commit complete v2.0.3 evidence and generated analysis
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add results/v2/source results/v2/analysis
-          git commit -m "results: add POLIS v2.0.2 confirmatory evidence and analysis"
+          git commit -m "results: add POLIS v2.0.3 confirmatory evidence and analysis"
           git push origin "HEAD:${HEAD_BRANCH}"
       - name: Upload complete research artifact
         uses: actions/upload-artifact@v4
         with:
-          name: polis-v2-complete
+          name: polis-v203-complete
           path: results/v2/
           if-no-files-found: error
           retention-days: 90
