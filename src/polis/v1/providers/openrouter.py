@@ -23,6 +23,11 @@ class OpenRouterProvider:
     portable structural subset needed to describe an action. Semantic constraints such
     as non-negative amounts remain enforced by Pydantic after the response is returned.
 
+    Providers occasionally return schema-forbidden extra keys even under strict
+    structured output. POLIS never interprets or aliases those keys. It drops them,
+    records their names for audit, preserves the complete provider text in ``raw_text``,
+    and validates the remaining frozen action fields exactly as before.
+
     ``justification`` is explanatory metadata only. It is not used by an institution,
     environment transition, metric, or score. Providers differ in whether they enforce
     string-length keywords in structured-output schemas, so POLIS canonicalizes an
@@ -31,6 +36,14 @@ class OpenRouterProvider:
     """
 
     JUSTIFICATION_MAX_CHARS = 500
+    ACTION_FIELDS = (
+        "action",
+        "amount",
+        "target",
+        "artifact_id",
+        "transformation",
+        "justification",
+    )
 
     def __init__(
         self,
@@ -116,7 +129,7 @@ class OpenRouterProvider:
                 "OpenRouter returned an empty structured action "
                 f"for model={model!r}, finish_reason={finish_reason!r}"
             )
-        action, justification_truncated = self._parse_action_content(content)
+        action, justification_truncated, dropped_extra_fields = self._parse_action_content(content)
         usage = self._usage(raw.get("usage") or {})
 
         result = ModelResponse(
@@ -138,6 +151,7 @@ class OpenRouterProvider:
                 "temperature_sent": self._send_temperature(model),
                 "justification_truncated": justification_truncated,
                 "justification_limit_chars": self.JUSTIFICATION_MAX_CHARS,
+                "dropped_extra_fields": dropped_extra_fields,
             },
         )
         self.budget.record(
@@ -154,32 +168,46 @@ class OpenRouterProvider:
                 "request_sha256": self.cache.key(request_payload),
                 "temperature_sent": self._send_temperature(model),
                 "justification_truncated": justification_truncated,
+                "dropped_extra_fields": dropped_extra_fields,
             },
         )
         self.cache.put(request_payload, result.model_dump(mode="json"))
         return result
 
     @classmethod
-    def _parse_action_content(cls, content: str) -> tuple[Action, bool]:
-        """Parse one action and canonicalize only overlong justification metadata.
+    def _parse_action_content(cls, content: str) -> tuple[Action, bool, list[str]]:
+        """Parse one action without semantically repairing provider output.
 
-        The full provider text remains available in ``ModelResponse.raw_text``. No
-        action-bearing field is repaired here. All other Pydantic validation failures
-        propagate unchanged so semantic invalidity cannot be silently normalized.
+        Unknown keys are discarded rather than interpreted because some providers can
+        violate ``additionalProperties: false``. Their names are returned for audit and
+        the complete original response remains available in ``ModelResponse.raw_text``.
+        Every frozen schema field must still be present. Overlong ``justification`` is
+        canonicalized because it is non-outcome metadata. All semantic Pydantic failures
+        otherwise propagate unchanged.
         """
 
         payload = json.loads(content)
+        if not isinstance(payload, dict):
+            raise ValueError("Structured POLIS action must be a JSON object")
+
+        expected = set(cls.ACTION_FIELDS)
+        missing = sorted(expected - set(payload))
+        if missing:
+            raise ValueError(f"Structured POLIS action is missing required fields: {missing}")
+
+        dropped_extra_fields = sorted(set(payload) - expected)
+        clean = {field: payload[field] for field in cls.ACTION_FIELDS}
+
         truncated = False
-        if isinstance(payload, dict):
-            justification = payload.get("justification")
-            if (
-                isinstance(justification, str)
-                and len(justification) > cls.JUSTIFICATION_MAX_CHARS
-            ):
-                payload = dict(payload)
-                payload["justification"] = justification[: cls.JUSTIFICATION_MAX_CHARS]
-                truncated = True
-        return Action.model_validate(payload), truncated
+        justification = clean.get("justification")
+        if (
+            isinstance(justification, str)
+            and len(justification) > cls.JUSTIFICATION_MAX_CHARS
+        ):
+            clean["justification"] = justification[: cls.JUSTIFICATION_MAX_CHARS]
+            truncated = True
+
+        return Action.model_validate(clean), truncated, dropped_extra_fields
 
     @staticmethod
     def _strict_action_schema() -> dict[str, Any]:
@@ -207,14 +235,7 @@ class OpenRouterProvider:
                 "transformation": nullable_string,
                 "justification": {"type": "string"},
             },
-            "required": [
-                "action",
-                "amount",
-                "target",
-                "artifact_id",
-                "transformation",
-                "justification",
-            ],
+            "required": list(OpenRouterProvider.ACTION_FIELDS),
             "additionalProperties": False,
         }
 
