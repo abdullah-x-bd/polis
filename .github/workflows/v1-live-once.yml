@@ -1,0 +1,89 @@
+name: POLIS v1 final live execution
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install POLIS
+        run: pip install -e ".[dev]"
+      - name: Verify repository secret
+        run: |
+          python - <<'PY'
+          import os
+          if not os.getenv("OPENROUTER_API_KEY"):
+              raise SystemExit("OPENROUTER_API_KEY repository secret is not configured")
+          print("OPENROUTER_API_KEY is configured. Secret value is not printed.")
+          PY
+      - name: Validate repository before paid inference
+        run: |
+          ruff check src/polis/v1 tests scripts
+          python -m compileall -q src/polis/v1 scripts
+          pytest
+          python scripts/run_v1_live.py --mode full --dry-run
+      - name: Smoke test all frozen models
+        run: |
+          python scripts/test_openrouter.py --model google/gemini-2.5-flash-lite --max-cost-usd 0.25
+          python scripts/test_openrouter.py --model mistralai/mistral-small-2603 --max-cost-usd 0.25
+          python scripts/test_openrouter.py --model openai/gpt-4.1-mini --max-cost-usd 0.25
+      - name: Run frozen three-model pilot
+        run: python scripts/run_v1_live.py --mode pilot --max-cost-usd 1.00
+      - name: Analyse pilot
+        run: |
+          PILOT=$(find results/live -maxdepth 1 -name 'polis-v1-pilot-*.jsonl' -print -quit)
+          python scripts/analyse_v1.py "$PILOT" --output results/analysis-pilot
+      - name: Run complete frozen confirmatory matrix
+        run: python scripts/run_v1_live.py --mode full --max-cost-usd 4.00
+      - name: Analyse complete confirmatory matrix
+        run: |
+          FULL=$(find results/live -maxdepth 1 -name 'polis-v1-full-*.jsonl' -print -quit)
+          python scripts/analyse_v1.py "$FULL" --output results/analysis
+      - name: Record completion metadata
+        if: success()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from polis.v1.protocol import load_protocol
+          from polis.v1.live import load_records, build_plan
+          protocol = load_protocol('configs/v1_live.json')
+          full = next(Path('results/live').glob('polis-v1-full-*.jsonl'))
+          records = load_records(full)
+          plan = build_plan(protocol, 'full')
+          payload = {
+              'git_sha': os.getenv('GITHUB_SHA'),
+              'protocol_fingerprint': protocol.fingerprint(),
+              'expected_episodes': plan.episodes,
+              'observed_episodes': len(records),
+              'complete': len(records) == plan.episodes,
+          }
+          Path('results/FINAL_RUN_COMPLETE.json').write_text(json.dumps(payload, indent=2) + '\n')
+          if not payload['complete']:
+              raise SystemExit(f"Incomplete full matrix: {payload}")
+          print(json.dumps(payload, indent=2))
+          PY
+      - name: Upload complete research artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: polis-v1-final-live-${{ github.run_id }}
+          path: |
+            results/live/**
+            results/costs/**
+            results/analysis/**
+            results/analysis-pilot/**
+            results/FINAL_RUN_COMPLETE.json
+          if-no-files-found: warn
+          retention-days: 90
