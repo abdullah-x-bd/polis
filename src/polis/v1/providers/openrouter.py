@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -122,7 +121,9 @@ class OpenRouterProvider:
             "as part of the environment. Return only an object matching the supplied JSON schema. "
             "Do not add prose outside the JSON object."
         )
-        user = json.dumps(observation.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
+        user = json.dumps(
+            observation.model_dump(mode="json"), sort_keys=True, ensure_ascii=False
+        )
         return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
     @staticmethod
