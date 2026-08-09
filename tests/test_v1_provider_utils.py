@@ -77,9 +77,10 @@ def test_overlong_justification_is_deterministically_truncated_only():
             "justification": "x" * 731,
         }
     )
-    action, truncated, dropped = OpenRouterProvider._parse_action_content(raw)
+    action, truncated, dropped, filled = OpenRouterProvider._parse_action_content(raw)
     assert truncated is True
     assert dropped == []
+    assert filled == []
     assert action.action.value == "delegate"
     assert action.target == "agent_b"
     assert action.artifact_id == "artifact_1"
@@ -100,9 +101,10 @@ def test_unknown_provider_field_is_dropped_and_audited_without_aliasing():
             "agent": "agent_c",
         }
     )
-    action, truncated, dropped = OpenRouterProvider._parse_action_content(raw)
+    action, truncated, dropped, filled = OpenRouterProvider._parse_action_content(raw)
     assert truncated is False
     assert dropped == ["agent"]
+    assert filled == []
     assert action.action.value == "delegate"
     assert action.target is None
     assert action.artifact_id == "artifact_1"
@@ -121,23 +123,72 @@ def test_multiple_unknown_fields_are_sorted_and_known_fields_untouched():
             "agent": "agent_c",
         }
     )
-    action, _, dropped = OpenRouterProvider._parse_action_content(raw)
+    action, _, dropped, filled = OpenRouterProvider._parse_action_content(raw)
     assert dropped == ["agent", "zzz"]
+    assert filled == []
     assert action.target == "agent_b"
     assert action.artifact_id == "artifact_1"
 
 
-def test_missing_frozen_action_field_is_not_filled_from_defaults():
+def test_missing_nullable_action_fields_are_filled_with_null_and_audited():
+    raw = json.dumps(
+        {
+            "action": "refuse",
+            "artifact_id": "artifact_1",
+            "justification": "Cannot proceed under the current boundary.",
+        }
+    )
+    action, truncated, dropped, filled = OpenRouterProvider._parse_action_content(raw)
+    assert truncated is False
+    assert dropped == []
+    assert filled == ["amount", "target", "transformation"]
+    assert action.action.value == "refuse"
+    assert action.amount is None
+    assert action.target is None
+    assert action.artifact_id == "artifact_1"
+    assert action.transformation is None
+
+
+def test_missing_all_nullable_action_fields_is_valid_syntax_only_normalization():
+    raw = json.dumps(
+        {
+            "action": "refuse",
+            "justification": "No compliant action is useful.",
+        }
+    )
+    action, _, _, filled = OpenRouterProvider._parse_action_content(raw)
+    assert filled == ["amount", "artifact_id", "target", "transformation"]
+    assert action.amount is None
+    assert action.target is None
+    assert action.artifact_id is None
+    assert action.transformation is None
+
+
+def test_missing_action_is_rejected():
+    raw = json.dumps(
+        {
+            "amount": None,
+            "target": None,
+            "artifact_id": None,
+            "transformation": None,
+            "justification": "missing semantic action",
+        }
+    )
+    with pytest.raises(ValueError, match="missing mandatory fields"):
+        OpenRouterProvider._parse_action_content(raw)
+
+
+def test_missing_justification_is_rejected():
     raw = json.dumps(
         {
             "action": "refuse",
             "amount": None,
             "target": None,
             "artifact_id": None,
-            "justification": "missing transformation",
+            "transformation": None,
         }
     )
-    with pytest.raises(ValueError, match="missing required fields"):
+    with pytest.raises(ValueError, match="missing mandatory fields"):
         OpenRouterProvider._parse_action_content(raw)
 
 
@@ -161,6 +212,18 @@ def test_justification_canonicalization_does_not_repair_semantic_fields():
         OpenRouterProvider._parse_action_content(raw)
 
 
+def test_missing_amount_for_resource_request_stays_semantically_missing():
+    raw = json.dumps(
+        {
+            "action": "request_resource",
+            "justification": "request without a numeric amount",
+        }
+    )
+    action, _, _, filled = OpenRouterProvider._parse_action_content(raw)
+    assert "amount" in filled
+    assert action.amount is None
+
+
 def test_in_limit_justification_is_not_marked_as_truncated():
     raw = json.dumps(
         {
@@ -172,9 +235,10 @@ def test_in_limit_justification_is_not_marked_as_truncated():
             "justification": "concise",
         }
     )
-    action, truncated, dropped = OpenRouterProvider._parse_action_content(raw)
+    action, truncated, dropped, filled = OpenRouterProvider._parse_action_content(raw)
     assert truncated is False
     assert dropped == []
+    assert filled == []
     assert action.justification == "concise"
 
 
