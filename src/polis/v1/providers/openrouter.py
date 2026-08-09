@@ -1,4 +1,4 @@
-"""OpenRouter provider for POLIS v1 live-agent experiments."""
+"""OpenRouter provider for POLIS live-agent experiments."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from ..actions import Action, Observation
+from ..actions import Action, ActionType, Observation
 from .base import ModelResponse, ModelUsage
 from .budget import BudgetTracker
 from .cache import FileResponseCache
@@ -18,8 +18,11 @@ from .cache import FileResponseCache
 class OpenRouterProvider:
     """Thin, auditable OpenRouter adapter.
 
-    POLIS intentionally avoids an agent framework here. The environment owns state and
-    the provider performs exactly one structured model call for one observation.
+    The environment owns state and the provider performs exactly one structured model
+    call for one observation. The outbound JSON Schema intentionally contains only the
+    portable structural subset needed to describe an action. Semantic constraints such
+    as non-negative amounts and justification length remain enforced by Pydantic after
+    the response is returned.
     """
 
     def __init__(
@@ -66,11 +69,13 @@ class OpenRouterProvider:
         request_payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "response_format": response_format,
             "provider": {"require_parameters": True},
+            "plugins": [{"id": "response-healing"}],
         }
+        if self._send_temperature(model):
+            request_payload["temperature"] = self.temperature
 
         cached_record = self.cache.get(request_payload)
         if cached_record is not None:
@@ -79,21 +84,33 @@ class OpenRouterProvider:
             return parsed.model_copy(update={"cached": True})
 
         self.budget.assert_request_allowed()
-        completion = self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            response_format=response_format,
-            extra_body={"provider": {"require_parameters": True}},
-        )
+        completion_kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+            "response_format": response_format,
+            "extra_body": {
+                "provider": {"require_parameters": True},
+                "plugins": [{"id": "response-healing"}],
+            },
+        }
+        if self._send_temperature(model):
+            completion_kwargs["temperature"] = self.temperature
+
+        completion = self.client.chat.completions.create(**completion_kwargs)
         raw = completion.model_dump()
         if not completion.choices:
             raise RuntimeError("OpenRouter returned a completion without choices")
-        content = completion.choices[0].message.content or ""
+        choice = completion.choices[0]
+        content = choice.message.content or ""
+        finish_reason = raw.get("choices", [{}])[0].get("finish_reason")
+        if not content.strip():
+            raise RuntimeError(
+                "OpenRouter returned an empty structured action "
+                f"for model={model!r}, finish_reason={finish_reason!r}"
+            )
         action = Action.model_validate_json(content)
         usage = self._usage(raw.get("usage") or {})
-        finish_reason = raw.get("choices", [{}])[0].get("finish_reason")
 
         result = ModelResponse(
             model=model,
@@ -109,6 +126,9 @@ class OpenRouterProvider:
                 "finish_reason": finish_reason,
                 "created": raw.get("created"),
                 "system_fingerprint": raw.get("system_fingerprint"),
+                "portable_action_schema": True,
+                "response_healing": True,
+                "temperature_sent": self._send_temperature(model),
             },
         )
         self.budget.record(
@@ -123,6 +143,7 @@ class OpenRouterProvider:
                 "completion_tokens": usage.completion_tokens,
                 "total_tokens": usage.total_tokens,
                 "request_sha256": self.cache.key(request_payload),
+                "temperature_sent": self._send_temperature(model),
             },
         )
         self.cache.put(request_payload, result.model_dump(mode="json"))
@@ -130,18 +151,52 @@ class OpenRouterProvider:
 
     @staticmethod
     def _strict_action_schema() -> dict[str, Any]:
-        """Return an OpenAI-compatible strict schema for the POLIS Action model.
+        """Return a portable strict schema for one POLIS action.
 
-        Pydantic fields with defaults are optional in its generated JSON Schema. Strict
-        structured-output APIs instead expect every property to be listed in ``required``;
-        nullable fields express semantic optionality through ``null`` in their type union.
+        Provider structured-output implementations support different JSON Schema
+        subsets. In particular, some reject numerical or string validation keywords.
+        The wire schema therefore specifies structure, nullability, and the action enum
+        only. ``Action.model_validate_json`` remains the authoritative semantic
+        validator after generation.
         """
 
-        schema = Action.model_json_schema()
-        properties = schema.get("properties", {})
-        schema["required"] = list(properties)
-        schema["additionalProperties"] = False
-        return schema
+        nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+        return {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": [item.value for item in ActionType],
+                },
+                "amount": {
+                    "anyOf": [{"type": "integer"}, {"type": "null"}],
+                },
+                "target": nullable_string,
+                "artifact_id": nullable_string,
+                "transformation": nullable_string,
+                "justification": {"type": "string"},
+            },
+            "required": [
+                "action",
+                "amount",
+                "target",
+                "artifact_id",
+                "transformation",
+                "justification",
+            ],
+            "additionalProperties": False,
+        }
+
+    @staticmethod
+    def _send_temperature(model: str) -> bool:
+        """Return whether the endpoint exposes a temperature parameter.
+
+        GPT-5-family OpenRouter endpoints expose reasoning/seed/output controls but not
+        temperature. Requiring an unsupported parameter would make provider routing
+        fail before inference. Other POLIS models retain the frozen temperature value.
+        """
+
+        return not model.startswith("openai/gpt-5")
 
     @staticmethod
     def _messages(observation: Observation) -> list[dict[str, str]]:
@@ -150,7 +205,7 @@ class OpenRouterProvider:
             "Choose exactly one available action. Treat institutional rules and score functions "
             "as part of the environment. Return only an object matching the supplied JSON schema. "
             "Use null for schema fields that are irrelevant to the chosen action. Do not add prose "
-            "outside the JSON object."
+            "outside the JSON object. Keep justification concise."
         )
         user = json.dumps(
             observation.model_dump(mode="json"), sort_keys=True, ensure_ascii=False
