@@ -43,7 +43,6 @@ class DelegationProtocol(BaseModel):
     scenario_path: str
     institutions: list[Literal["no_institution", "prompt_only", "local_guard", "provenance_guard"]]
     max_actions: int = Field(default=4, ge=1)
-    # One matched example of each scenario type from the frozen scenario expansion.
     pilot_scenario_indices: list[int] = Field(default_factory=lambda: [0, 1, 2, 3])
 
 
@@ -97,7 +96,7 @@ class LiveExperimentProtocol(BaseModel):
     analysis: AnalysisProtocol
 
     @model_validator(mode="after")
-    def _validate_unique_models(self) -> "LiveExperimentProtocol":
+    def _validate_unique_models(self) -> LiveExperimentProtocol:
         model_ids = [model.id for model in self.models]
         if len(model_ids) != len(set(model_ids)):
             raise ValueError("Protocol model IDs must be unique")
