@@ -18,11 +18,11 @@ jobs:
       - name: Install research environment
         run: pip install -e ".[dev]"
       - name: Ruff
-        run: ruff check src/polis/v2 tests/test_v2.py scripts/run_v2.py scripts/analyse_v2.py scripts/stress_v2.py
+        run: ruff check src/polis/v2 tests/test_v2.py tests/test_v2_edge_cases.py scripts/run_v2.py scripts/analyse_v2.py scripts/stress_v2.py
       - name: Compile
         run: python -m compileall -q src/polis/v2 scripts/run_v2.py scripts/analyse_v2.py scripts/stress_v2.py
       - name: Tests
-        run: pytest tests/test_v2.py
+        run: pytest tests/test_v2.py tests/test_v2_edge_cases.py
       - name: Zero-cost scripted mechanism stress suite
         run: python scripts/stress_v2.py --output /tmp/polis-v2-scripted-stress.json
       - name: Print all preregistered study plans without API calls
