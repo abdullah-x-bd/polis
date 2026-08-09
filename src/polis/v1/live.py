@@ -70,6 +70,8 @@ class RunManifest(BaseModel):
     protocol_version: str
     mode: Literal["pilot", "full"]
     selected_models: list[str]
+    shard_index: int = 0
+    shard_count: int = 1
     started_at: str
     finished_at: str | None = None
     status: Literal["running", "complete", "partial", "failed"] = "running"
@@ -95,6 +97,8 @@ class MatrixPlan:
     delegation_institutions: int
     delegation_max_actions: int
     repetitions: int
+    shard_index: int = 0
+    shard_count: int = 1
 
     @property
     def commons_episodes(self) -> int:
@@ -132,6 +136,8 @@ class MatrixPlan:
         return {
             "mode": self.mode,
             "models": list(self.models),
+            "shard_index": self.shard_index,
+            "shard_count": self.shard_count,
             "commons_worlds": self.commons_worlds,
             "commons_institutions": self.commons_institutions,
             "commons_rounds": self.commons_rounds,
@@ -149,7 +155,10 @@ def build_plan(
     protocol: LiveExperimentProtocol,
     mode: Literal["pilot", "full"],
     selected_models: Iterable[str] | None = None,
+    shard_index: int = 0,
+    shard_count: int = 1,
 ) -> MatrixPlan:
+    _validate_shard(shard_index, shard_count)
     models = _selected_model_ids(protocol, selected_models)
     worlds = load_resource_worlds(protocol.commons.scenario_path)
     delegation = load_delegation_scenarios(protocol.delegation.scenario_path)
@@ -160,6 +169,10 @@ def build_plan(
             protocol.delegation.pilot_scenario_indices,
             "delegation pilot",
         )
+    worlds = _apply_shard(worlds, shard_index, shard_count)
+    delegation = _apply_shard(delegation, shard_index, shard_count)
+    if not worlds or not delegation:
+        raise ValueError("Shard contains no Commons worlds or no Delegation scenarios")
     return MatrixPlan(
         mode=mode,
         models=tuple(models),
@@ -171,6 +184,8 @@ def build_plan(
         delegation_institutions=len(protocol.delegation.institutions),
         delegation_max_actions=protocol.delegation.max_actions,
         repetitions=protocol.inference.repetitions,
+        shard_index=shard_index,
+        shard_count=shard_count,
     )
 
 
@@ -182,18 +197,21 @@ def run_live_matrix(
     mode: Literal["pilot", "full"] = "pilot",
     selected_models: Iterable[str] | None = None,
     run_id: str | None = None,
+    shard_index: int = 0,
+    shard_count: int = 1,
 ) -> RunManifest:
-    """Run or resume the frozen live matrix.
+    """Run or resume a frozen live matrix or a disjoint scenario shard.
 
     Results are appended after each episode. A rerun against the same output file skips
-    completed episode keys. This makes expensive experiments resilient to CI timeouts,
-    provider interruptions, and local process failures.
+    completed episode keys. Sharding partitions the scenario lists by stable list index;
+    it does not alter scenarios, institutions, models, prompts, or the protocol fingerprint.
     """
 
+    _validate_shard(shard_index, shard_count)
     model_ids = _selected_model_ids(protocol, selected_models)
-    plan = build_plan(protocol, mode, model_ids)
+    plan = build_plan(protocol, mode, model_ids, shard_index, shard_count)
     fingerprint = protocol.fingerprint()
-    run_id = run_id or _default_run_id(fingerprint, mode)
+    run_id = run_id or _default_run_id(fingerprint, mode, shard_index, shard_count)
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -207,6 +225,8 @@ def run_live_matrix(
         protocol_version=protocol.protocol_version,
         mode=mode,
         selected_models=model_ids,
+        shard_index=shard_index,
+        shard_count=shard_count,
         started_at=_now(),
         git_sha=os.getenv("GITHUB_SHA"),
         python_version=sys.version.split()[0],
@@ -218,6 +238,7 @@ def run_live_matrix(
         notes=[
             "Each record contains structured environment outcomes and raw model-call audit data.",
             "Existing completion keys are skipped on resume; provider-level identical calls are separately cached.",
+            f"Scenario shard {shard_index + 1} of {shard_count}; sharding does not change the frozen protocol fingerprint.",
         ],
     )
     _write_manifest(manifest_path, manifest)
@@ -231,6 +252,8 @@ def run_live_matrix(
             protocol.delegation.pilot_scenario_indices,
             "delegation pilot",
         )
+    worlds = _apply_shard(worlds, shard_index, shard_count)
+    delegation_scenarios = _apply_shard(delegation_scenarios, shard_index, shard_count)
 
     try:
         for model in model_ids:
@@ -403,6 +426,19 @@ def _select_indices(items: list[Any], indices: list[int], label: str) -> list[An
         raise ValueError(f"{label} contains an out-of-range index") from exc
 
 
+def _validate_shard(shard_index: int, shard_count: int) -> None:
+    if shard_count < 1:
+        raise ValueError("shard_count must be at least 1")
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError("shard_index must satisfy 0 <= shard_index < shard_count")
+
+
+def _apply_shard(items: list[Any], shard_index: int, shard_count: int) -> list[Any]:
+    if shard_count == 1:
+        return items
+    return [item for index, item in enumerate(items) if index % shard_count == shard_index]
+
+
 def _collect_calls(agents: Iterable[ModelAgent]) -> list[ModelResponse]:
     calls: list[ModelResponse] = []
     for agent in agents:
@@ -442,8 +478,16 @@ def _write_manifest(path: Path, manifest: RunManifest) -> None:
     temporary.replace(path)
 
 
-def _default_run_id(fingerprint: str, mode: str) -> str:
-    return f"polis-v1-{mode}-{fingerprint[:12]}"
+def _default_run_id(
+    fingerprint: str,
+    mode: str,
+    shard_index: int = 0,
+    shard_count: int = 1,
+) -> str:
+    base = f"polis-v1-{mode}-{fingerprint[:12]}"
+    if shard_count > 1:
+        return f"{base}-s{shard_index + 1}of{shard_count}"
+    return base
 
 
 def _now() -> str:
