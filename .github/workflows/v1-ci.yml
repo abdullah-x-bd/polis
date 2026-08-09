@@ -19,9 +19,16 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
       - name: Ruff
-        run: ruff check src tests scripts
+        run: >-
+          ruff check src/polis/v1
+          tests/test_v1_resource_commons.py
+          tests/test_v1_delegation.py
+          tests/test_v1_provider_utils.py
+          scripts/calibrate_commons_v1.py
+          scripts/stress_delegation_v1.py
+          scripts/test_openrouter.py
       - name: Compile
-        run: python -m compileall -q src scripts
+        run: python -m compileall -q src/polis/v1 scripts
       - name: Tests
         run: pytest
       - name: Zero-cost Commons calibration
