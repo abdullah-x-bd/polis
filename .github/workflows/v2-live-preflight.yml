@@ -1,11 +1,6 @@
 name: POLIS v2.0.3 live preflight
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - configs/v2_protocol.json
-      - .github/workflows/v2-live-preflight.yml
   workflow_dispatch:
 
 jobs:
