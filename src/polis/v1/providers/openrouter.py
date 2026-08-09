@@ -16,7 +16,7 @@ from .cache import FileResponseCache
 
 
 class OpenRouterProvider:
-    """Auditable OpenRouter adapter with no semantic action repair."""
+    """Auditable OpenRouter adapter with syntax-only response normalization."""
 
     JUSTIFICATION_MAX_CHARS = 500
     ACTION_FIELDS = (
@@ -27,6 +27,8 @@ class OpenRouterProvider:
         "transformation",
         "justification",
     )
+    MANDATORY_ACTION_FIELDS = ("action", "justification")
+    NULLABLE_ACTION_FIELDS = ("amount", "target", "artifact_id", "transformation")
 
     def __init__(
         self,
@@ -120,7 +122,7 @@ class OpenRouterProvider:
                 "OpenRouter returned an empty structured action "
                 f"for model={model!r}, finish_reason={finish_reason!r}"
             )
-        action, truncated, dropped = self._parse_action_content(content)
+        action, truncated, dropped, filled_nullable = self._parse_action_content(content)
         usage = self._usage(raw.get("usage") or {})
         metadata = {
             "actual_model": raw.get("model"),
@@ -134,6 +136,7 @@ class OpenRouterProvider:
             "justification_truncated": truncated,
             "justification_limit_chars": self.JUSTIFICATION_MAX_CHARS,
             "dropped_extra_fields": dropped,
+            "filled_missing_nullable_fields": filled_nullable,
         }
         result = ModelResponse(
             model=model,
@@ -162,6 +165,7 @@ class OpenRouterProvider:
                 "reasoning_control": reasoning,
                 "justification_truncated": truncated,
                 "dropped_extra_fields": dropped,
+                "filled_missing_nullable_fields": filled_nullable,
             },
         )
         self.cache.put(request_payload, result.model_dump(mode="json"))
@@ -175,17 +179,31 @@ class OpenRouterProvider:
         return None
 
     @classmethod
-    def _parse_action_content(cls, content: str) -> tuple[Action, bool, list[str]]:
+    def _parse_action_content(
+        cls,
+        content: str,
+    ) -> tuple[Action, bool, list[str], list[str]]:
         """Canonicalize syntax-only provider variance, never action semantics."""
         payload = json.loads(content)
         if not isinstance(payload, dict):
             raise ValueError("Structured POLIS action must be a JSON object")
+
+        missing_mandatory = sorted(set(cls.MANDATORY_ACTION_FIELDS) - set(payload))
+        if missing_mandatory:
+            raise ValueError(
+                f"Structured POLIS action is missing mandatory fields: {missing_mandatory}"
+            )
+
         expected = set(cls.ACTION_FIELDS)
-        missing = sorted(expected - set(payload))
-        if missing:
-            raise ValueError(f"Structured POLIS action is missing required fields: {missing}")
         dropped = sorted(set(payload) - expected)
-        clean = {field: payload[field] for field in cls.ACTION_FIELDS}
+        filled_nullable = sorted(
+            field for field in cls.NULLABLE_ACTION_FIELDS if field not in payload
+        )
+        clean = {
+            field: payload[field] if field in payload else None
+            for field in cls.ACTION_FIELDS
+        }
+
         truncated = False
         if (
             isinstance(clean["justification"], str)
@@ -193,7 +211,8 @@ class OpenRouterProvider:
         ):
             clean["justification"] = clean["justification"][: cls.JUSTIFICATION_MAX_CHARS]
             truncated = True
-        return Action.model_validate(clean), truncated, dropped
+
+        return Action.model_validate(clean), truncated, dropped, filled_nullable
 
     @staticmethod
     def _strict_action_schema() -> dict[str, Any]:
