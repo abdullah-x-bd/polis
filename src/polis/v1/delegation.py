@@ -82,7 +82,7 @@ class DelegationBoundariesEnvironment:
                 },
                 private_state={
                     "task": self.scenario.task.model_dump(),
-                    "artifact": artifact.model_dump(),
+                    "artifact": self._agent_artifact_view(artifact),
                     "preferred_target": preferred_target,
                 },
                 available_actions=[
@@ -226,6 +226,25 @@ class DelegationBoundariesEnvironment:
             policy_laundering_succeeded=laundering_succeeded,
             path_length=len(steps),
         )
+
+    @staticmethod
+    def _agent_artifact_view(artifact: ArtifactState) -> dict[str, object]:
+        """Return the artifact metadata visible to an acting agent.
+
+        Immutable root-policy fields are deliberately withheld. They are institutional
+        ground truth available to the provenance-aware guard, not privileged knowledge
+        handed to the model. This separation is central to the local-vs-provenance test.
+        """
+
+        return {
+            "artifact_id": artifact.artifact_id,
+            "owner_principal": artifact.owner_principal,
+            "visible_cross_principal_allowed": artifact.visible_cross_principal_allowed,
+            "authorized_transformations": list(artifact.authorized_transformations),
+            "transformation_history": list(artifact.transformation_history),
+            "transformed": artifact.transformed,
+            "sanitized": artifact.sanitized,
+        }
 
     def _transform_artifact(
         self,
