@@ -2,6 +2,7 @@ import pytest
 
 from polis.v1.providers.budget import BudgetExceeded, BudgetTracker
 from polis.v1.providers.cache import FileResponseCache
+from polis.v1.providers.openrouter import OpenRouterProvider
 
 
 def test_file_cache_round_trip(tmp_path):
@@ -30,3 +31,10 @@ def test_budget_stops_before_reserved_request(tmp_path):
     tracker.record(cost_usd=0.16, metadata={})
     with pytest.raises(BudgetExceeded):
         tracker.assert_request_allowed()
+
+
+def test_openrouter_strict_schema_requires_every_action_property():
+    schema = OpenRouterProvider._strict_action_schema()
+    properties = schema["properties"]
+    assert set(schema["required"]) == set(properties)
+    assert schema["additionalProperties"] is False
