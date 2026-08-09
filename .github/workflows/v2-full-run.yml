@@ -1,10 +1,16 @@
 name: POLIS v2.0.2 full confirmatory run
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/v2-full-run.yml
+  workflow_dispatch:
+    inputs:
+      execution_sha:
+        description: Exact frozen execution SHA. Leave blank to use the selected ref SHA.
+        required: false
+        type: string
+      head_branch:
+        description: Branch to receive validated combined evidence and analysis.
+        required: false
+        type: string
 
 jobs:
   live:
@@ -32,13 +38,13 @@ jobs:
       EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
       EXPECTED_FINGERPRINT: e49d69fb88fed250268aba7d9e9912b98bbb07cacbc114a1a0ba05e4480e44f2
       BATCH_BUDGET_USD: "0.90"
-      EXECUTION_SHA: ${{ github.event.pull_request.head.sha }}
+      EXECUTION_SHA: ${{ inputs.execution_sha || github.sha }}
       BATCH_INDEX: ${{ matrix.batch }}
       SHARD_LIST: ${{ matrix.shards }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.execution_sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -151,12 +157,12 @@ jobs:
     env:
       EXPECTED_FINGERPRINT: e49d69fb88fed250268aba7d9e9912b98bbb07cacbc114a1a0ba05e4480e44f2
       EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
-      EXECUTION_SHA: ${{ github.event.pull_request.head.sha }}
-      HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+      EXECUTION_SHA: ${{ inputs.execution_sha || github.sha }}
+      HEAD_BRANCH: ${{ inputs.head_branch || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ inputs.head_branch || github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
