@@ -26,6 +26,8 @@ def agents_for(world, profile: str, seed: int):
         strategies = ["greedy"] * 4
     elif profile == "mixed":
         strategies = ["truthful", "greedy", "max_requester", "adaptive_greedy"]
+    elif profile == "price_aware":
+        strategies = ["price_aware"] * 4
     else:
         raise ValueError(profile)
     return {
@@ -44,11 +46,14 @@ def evaluate(institution, worlds, profile: str):
         rows.append(final)
     return {
         "institution": institution.name,
+        "quota": getattr(institution, "quota", None),
+        "alpha": getattr(institution, "alpha", None),
         "profile": profile,
         "mean_welfare": mean(row.system_welfare for row in rows),
         "mean_efficiency": mean(row.efficiency_ratio for row in rows),
         "mean_overclaim": mean(row.overclaim_ratio for row in rows),
         "mean_waste": mean(row.resource_waste for row in rows),
+        "mean_charge": mean(row.total_charge for row in rows),
     }
 
 
@@ -61,11 +66,14 @@ def main() -> None:
     worlds = load_resource_worlds(args.worlds)
     mechanisms = [NoCommonsInstitution(), PromptCommonsInstitution()]
     mechanisms.extend(HardQuotaInstitution(quota=q) for q in [20, 25, 30, 35, 40])
-    mechanisms.extend(CongestionPricingInstitution(alpha=a) for a in [0.05, 0.10, 0.20, 0.40])
+    mechanisms.extend(
+        CongestionPricingInstitution(alpha=a)
+        for a in [0.02, 0.05, 0.10, 0.20, 0.40, 0.80]
+    )
 
     results = [
         evaluate(mechanism, worlds, profile)
-        for profile in ["truthful", "greedy", "mixed"]
+        for profile in ["truthful", "greedy", "mixed", "price_aware"]
         for mechanism in mechanisms
     ]
     out = Path(args.output)
