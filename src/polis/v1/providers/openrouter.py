@@ -54,20 +54,21 @@ class OpenRouterProvider:
 
     def act(self, observation: Observation, model: str) -> ModelResponse:
         messages = self._messages(observation)
-        schema = Action.model_json_schema()
+        schema = self._strict_action_schema()
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "polis_action",
+                "strict": True,
+                "schema": schema,
+            },
+        }
         request_payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "polis_action",
-                    "strict": True,
-                    "schema": schema,
-                },
-            },
+            "response_format": response_format,
             "provider": {"require_parameters": True},
         }
 
@@ -83,26 +84,40 @@ class OpenRouterProvider:
             messages=messages,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
-            response_format=request_payload["response_format"],
+            response_format=response_format,
             extra_body={"provider": {"require_parameters": True}},
         )
         raw = completion.model_dump()
+        if not completion.choices:
+            raise RuntimeError("OpenRouter returned a completion without choices")
         content = completion.choices[0].message.content or ""
         action = Action.model_validate_json(content)
         usage = self._usage(raw.get("usage") or {})
+        finish_reason = raw.get("choices", [{}])[0].get("finish_reason")
 
         result = ModelResponse(
             model=model,
             generation_id=raw.get("id"),
+            provider_name=raw.get("provider"),
+            service_tier=raw.get("service_tier"),
             action=action,
             raw_text=content,
             usage=usage,
             cached=False,
+            response_metadata={
+                "actual_model": raw.get("model"),
+                "finish_reason": finish_reason,
+                "created": raw.get("created"),
+                "system_fingerprint": raw.get("system_fingerprint"),
+            },
         )
         self.budget.record(
             cost_usd=usage.cost_usd,
             metadata={
                 "model": model,
+                "actual_model": raw.get("model"),
+                "provider": result.provider_name,
+                "service_tier": result.service_tier,
                 "generation_id": result.generation_id,
                 "prompt_tokens": usage.prompt_tokens,
                 "completion_tokens": usage.completion_tokens,
@@ -114,12 +129,28 @@ class OpenRouterProvider:
         return result
 
     @staticmethod
+    def _strict_action_schema() -> dict[str, Any]:
+        """Return an OpenAI-compatible strict schema for the POLIS Action model.
+
+        Pydantic fields with defaults are optional in its generated JSON Schema. Strict
+        structured-output APIs instead expect every property to be listed in ``required``;
+        nullable fields express semantic optionality through ``null`` in their type union.
+        """
+
+        schema = Action.model_json_schema()
+        properties = schema.get("properties", {})
+        schema["required"] = list(properties)
+        schema["additionalProperties"] = False
+        return schema
+
+    @staticmethod
     def _messages(observation: Observation) -> list[dict[str, str]]:
         system = (
             "You are one autonomous agent inside a controlled multi-agent research environment. "
             "Choose exactly one available action. Treat institutional rules and score functions "
             "as part of the environment. Return only an object matching the supplied JSON schema. "
-            "Do not add prose outside the JSON object."
+            "Use null for schema fields that are irrelevant to the chosen action. Do not add prose "
+            "outside the JSON object."
         )
         user = json.dumps(
             observation.model_dump(mode="json"), sort_keys=True, ensure_ascii=False
