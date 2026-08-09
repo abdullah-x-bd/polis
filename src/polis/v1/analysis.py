@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -13,14 +14,7 @@ from scipy.stats import binomtest, wilcoxon
 from .live import LiveEpisodeRecord
 from .protocol import LiveExperimentProtocol
 
-
-COMMONS_COLUMNS = [
-    "efficiency_ratio",
-    "overclaim_ratio",
-    "resource_waste",
-    "total_charge",
-]
-
+COMMONS_COLUMNS = ["efficiency_ratio", "overclaim_ratio", "resource_waste", "total_charge"]
 DELEGATION_COLUMNS = [
     "realized_violation",
     "task_completed",
@@ -38,7 +32,6 @@ def records_to_frames(
 
     commons_rows: list[dict[str, Any]] = []
     delegation_rows: list[dict[str, Any]] = []
-
     for record in records:
         base = {
             "run_id": record.run_id,
@@ -84,7 +77,6 @@ def records_to_frames(
             )
         else:
             raise ValueError(f"Unknown environment {record.environment}")
-
     return pd.DataFrame(commons_rows), pd.DataFrame(delegation_rows)
 
 
@@ -94,36 +86,30 @@ def analyse_records(
 ) -> dict[str, Any]:
     """Run the frozen descriptive and paired inferential analysis."""
 
-    commons, delegation = records_to_frames(records)
-    summaries = _summaries(commons, delegation)
+    record_list = list(records)
+    commons, delegation = records_to_frames(record_list)
     contrasts: list[dict[str, Any]] = []
-
     if not commons.empty:
         for endpoint in COMMONS_COLUMNS:
             contrasts.extend(
                 _continuous_contrasts(
                     commons,
-                    endpoint=endpoint,
-                    bootstrap_samples=protocol.analysis.bootstrap_samples,
-                    confidence_level=protocol.analysis.confidence_level,
+                    endpoint,
+                    protocol.analysis.bootstrap_samples,
+                    protocol.analysis.confidence_level,
                 )
             )
-
     if not delegation.empty:
         for endpoint in DELEGATION_COLUMNS:
             contrasts.extend(
                 _binary_contrasts(
                     delegation,
-                    endpoint=endpoint,
-                    bootstrap_samples=protocol.analysis.bootstrap_samples,
-                    confidence_level=protocol.analysis.confidence_level,
+                    endpoint,
+                    protocol.analysis.bootstrap_samples,
+                    protocol.analysis.confidence_level,
                 )
             )
-
     _apply_holm_by_endpoint(contrasts)
-    costs = _cost_summary(commons, delegation)
-    completeness = _completeness(records, protocol)
-
     return {
         "protocol_fingerprint": protocol.fingerprint(),
         "protocol_version": protocol.protocol_version,
@@ -134,9 +120,9 @@ def analyse_records(
             "confidence_level": protocol.analysis.confidence_level,
             "bootstrap_samples": protocol.analysis.bootstrap_samples,
         },
-        "completeness": completeness,
-        "costs": costs,
-        "summaries": summaries,
+        "completeness": _completeness(record_list, protocol),
+        "costs": _cost_summary(commons, delegation),
+        "summaries": _summaries(commons, delegation),
         "contrasts": contrasts,
     }
 
@@ -144,8 +130,7 @@ def analyse_records(
 def _summaries(commons: pd.DataFrame, delegation: pd.DataFrame) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     if not commons.empty:
-        grouped = commons.groupby(["model", "institution"], dropna=False)
-        for (model, institution), group in grouped:
+        for (model, institution), group in commons.groupby(["model", "institution"]):
             row: dict[str, Any] = {
                 "environment": "resource_commons",
                 "model": model,
@@ -154,12 +139,12 @@ def _summaries(commons: pd.DataFrame, delegation: pd.DataFrame) -> list[dict[str
             }
             for endpoint in COMMONS_COLUMNS:
                 row[f"mean_{endpoint}"] = float(group[endpoint].mean())
-                row[f"sd_{endpoint}"] = float(group[endpoint].std(ddof=1)) if len(group) > 1 else 0.0
+                row[f"sd_{endpoint}"] = (
+                    float(group[endpoint].std(ddof=1)) if len(group) > 1 else 0.0
+                )
             rows.append(row)
-
     if not delegation.empty:
-        grouped = delegation.groupby(["model", "institution"], dropna=False)
-        for (model, institution), group in grouped:
+        for (model, institution), group in delegation.groupby(["model", "institution"]):
             row = {
                 "environment": "delegation_boundaries",
                 "model": model,
@@ -175,7 +160,6 @@ def _summaries(commons: pd.DataFrame, delegation: pd.DataFrame) -> list[dict[str
 
 def _continuous_contrasts(
     frame: pd.DataFrame,
-    *,
     endpoint: str,
     bootstrap_samples: int,
     confidence_level: float,
@@ -191,38 +175,34 @@ def _continuous_contrasts(
             diff = treated - baseline
             ci_low, ci_high = _paired_bootstrap_ci(
                 diff,
-                samples=bootstrap_samples,
-                confidence_level=confidence_level,
-                seed=_stable_seed(str(model), endpoint, treatment),
+                bootstrap_samples,
+                confidence_level,
+                _stable_seed(str(model), endpoint, treatment),
             )
-            if np.allclose(diff, 0):
-                p_value = 1.0
-            else:
-                p_value = float(wilcoxon(treated, baseline, alternative="two-sided").pvalue)
+            p_value = (
+                1.0
+                if np.allclose(diff, 0)
+                else float(wilcoxon(treated, baseline, alternative="two-sided").pvalue)
+            )
             rows.append(
-                {
-                    "environment": "resource_commons",
-                    "model": model,
-                    "endpoint": endpoint,
-                    "baseline": "no_institution",
-                    "treatment": treatment,
-                    "n_pairs": int(len(diff)),
-                    "baseline_mean": float(baseline.mean()),
-                    "treatment_mean": float(treated.mean()),
-                    "effect": float(diff.mean()),
-                    "ci_low": ci_low,
-                    "ci_high": ci_high,
-                    "p_value": p_value,
-                    "p_adjusted": None,
-                    "test": "paired_wilcoxon",
-                }
+                _contrast_row(
+                    "resource_commons",
+                    model,
+                    endpoint,
+                    treatment,
+                    baseline,
+                    treated,
+                    ci_low,
+                    ci_high,
+                    p_value,
+                    "paired_wilcoxon",
+                )
             )
     return rows
 
 
 def _binary_contrasts(
     frame: pd.DataFrame,
-    *,
     endpoint: str,
     bootstrap_samples: int,
     confidence_level: float,
@@ -238,9 +218,9 @@ def _binary_contrasts(
             diff = treated.astype(float) - baseline.astype(float)
             ci_low, ci_high = _paired_bootstrap_ci(
                 diff,
-                samples=bootstrap_samples,
-                confidence_level=confidence_level,
-                seed=_stable_seed(str(model), endpoint, treatment),
+                bootstrap_samples,
+                confidence_level,
+                _stable_seed(str(model), endpoint, treatment),
             )
             baseline_only = int(np.sum(baseline & ~treated))
             treatment_only = int(np.sum(~baseline & treated))
@@ -257,34 +237,59 @@ def _binary_contrasts(
                     ).pvalue
                 )
             )
-            rows.append(
-                {
-                    "environment": "delegation_boundaries",
-                    "model": model,
-                    "endpoint": endpoint,
-                    "baseline": "no_institution",
-                    "treatment": treatment,
-                    "n_pairs": int(len(diff)),
-                    "baseline_mean": float(baseline.mean()),
-                    "treatment_mean": float(treated.mean()),
-                    "effect": float(diff.mean()),
-                    "ci_low": ci_low,
-                    "ci_high": ci_high,
-                    "p_value": p_value,
-                    "p_adjusted": None,
-                    "test": "exact_discordant_pair",
-                    "baseline_only_discordant": baseline_only,
-                    "treatment_only_discordant": treatment_only,
-                }
+            row = _contrast_row(
+                "delegation_boundaries",
+                model,
+                endpoint,
+                treatment,
+                baseline.astype(float),
+                treated.astype(float),
+                ci_low,
+                ci_high,
+                p_value,
+                "exact_discordant_pair",
             )
+            row["baseline_only_discordant"] = baseline_only
+            row["treatment_only_discordant"] = treatment_only
+            rows.append(row)
     return rows
 
 
+def _contrast_row(
+    environment: str,
+    model: str,
+    endpoint: str,
+    treatment: str,
+    baseline: np.ndarray,
+    treated: np.ndarray,
+    ci_low: float,
+    ci_high: float,
+    p_value: float,
+    test: str,
+) -> dict[str, Any]:
+    diff = treated - baseline
+    return {
+        "environment": environment,
+        "model": model,
+        "endpoint": endpoint,
+        "baseline": "no_institution",
+        "treatment": treatment,
+        "n_pairs": int(len(diff)),
+        "baseline_mean": float(baseline.mean()),
+        "treatment_mean": float(treated.mean()),
+        "effect": float(diff.mean()),
+        "ci_low": ci_low,
+        "ci_high": ci_high,
+        "p_value": p_value,
+        "p_adjusted": None,
+        "test": test,
+    }
+
+
 def _paired_values(frame: pd.DataFrame, endpoint: str, treatment: str) -> pd.DataFrame:
-    keys = ["model", "scenario_id", "repetition"]
     subset = frame[frame["institution"].isin(["no_institution", treatment])]
     pivot = subset.pivot_table(
-        index=keys,
+        index=["model", "scenario_id", "repetition"],
         columns="institution",
         values=endpoint,
         aggfunc="first",
@@ -297,7 +302,6 @@ def _paired_values(frame: pd.DataFrame, endpoint: str, treatment: str) -> pd.Dat
 
 def _paired_bootstrap_ci(
     differences: np.ndarray,
-    *,
     samples: int,
     confidence_level: float,
     seed: int,
@@ -319,48 +323,37 @@ def _apply_holm_by_endpoint(contrasts: list[dict[str, Any]]) -> None:
     groups: defaultdict[tuple[str, str], list[int]] = defaultdict(list)
     for index, row in enumerate(contrasts):
         groups[(str(row["environment"]), str(row["endpoint"]))].append(index)
-
     for indices in groups.values():
         p_values = [float(contrasts[index]["p_value"]) for index in indices]
-        adjusted = _holm_adjust(p_values)
-        for index, value in zip(indices, adjusted, strict=True):
+        for index, value in zip(indices, _holm_adjust(p_values), strict=True):
             contrasts[index]["p_adjusted"] = value
 
 
 def _holm_adjust(p_values: list[float]) -> list[float]:
-    if not p_values:
-        return []
     order = sorted(range(len(p_values)), key=p_values.__getitem__)
     adjusted = [1.0] * len(p_values)
     running = 0.0
-    m = len(p_values)
     for rank, original_index in enumerate(order):
-        candidate = min(1.0, (m - rank) * p_values[original_index])
+        candidate = min(1.0, (len(p_values) - rank) * p_values[original_index])
         running = max(running, candidate)
         adjusted[original_index] = running
     return adjusted
 
 
 def _cost_summary(commons: pd.DataFrame, delegation: pd.DataFrame) -> dict[str, Any]:
-    frames = [frame for frame in [commons, delegation] if not frame.empty]
+    frames = [frame for frame in (commons, delegation) if not frame.empty]
     if not frames:
-        return {
-            "total_cost_usd": 0.0,
-            "total_tokens": 0,
-            "total_model_calls": 0,
-            "by_model": [],
-        }
+        return {"total_cost_usd": 0.0, "total_tokens": 0, "total_model_calls": 0, "by_model": []}
     combined = pd.concat(frames, ignore_index=True)
-    by_model = []
-    for model, group in combined.groupby("model"):
-        by_model.append(
-            {
-                "model": model,
-                "cost_usd": float(group["episode_cost_usd"].sum()),
-                "tokens": int(group["episode_tokens"].sum()),
-                "model_calls": int(group["model_calls"].sum()),
-            }
-        )
+    by_model = [
+        {
+            "model": model,
+            "cost_usd": float(group["episode_cost_usd"].sum()),
+            "tokens": int(group["episode_tokens"].sum()),
+            "model_calls": int(group["model_calls"].sum()),
+        }
+        for model, group in combined.groupby("model")
+    ]
     return {
         "total_cost_usd": float(combined["episode_cost_usd"].sum()),
         "total_tokens": int(combined["episode_tokens"].sum()),
@@ -376,7 +369,7 @@ def _completeness(
     records = list(records)
     by_mode: defaultdict[str, int] = defaultdict(int)
     by_environment: defaultdict[str, int] = defaultdict(int)
-    fingerprints = set()
+    fingerprints: set[str] = set()
     for record in records:
         by_mode[record.mode] += 1
         by_environment[record.environment] += 1
@@ -385,7 +378,7 @@ def _completeness(
         "records": len(records),
         "modes": dict(by_mode),
         "environments": dict(by_environment),
-        "single_protocol_fingerprint": fingerprints in [set(), {protocol.fingerprint()}],
+        "single_protocol_fingerprint": not fingerprints or fingerprints == {protocol.fingerprint()},
         "observed_fingerprints": sorted(fingerprints),
     }
 
