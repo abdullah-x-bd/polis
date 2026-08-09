@@ -72,12 +72,12 @@ The protocol fingerprint printed by the command is the identifier that must appe
 Create a local `.env` file that is never committed:
 
 ```text
-OPENROUTER_API_KEY=your_rotated_key_here
+OPENROUTER_API_KEY=your_key_here
 ```
 
 The repository ignores `.env`, live cache files, live result files, cost ledgers, and generated analysis directories by default.
 
-For GitHub Actions, configure `OPENROUTER_API_KEY` as an Actions repository secret. The manual live workflow additionally requires the explicit `RUN_ROTATED_KEY` confirmation string before any inference is attempted.
+For GitHub Actions, configure `OPENROUTER_API_KEY` as an Actions repository secret. The manual live workflow additionally requires the explicit `RUN_ROTATED_KEY` confirmation string before inference is attempted.
 
 ## One-request API smoke test
 
@@ -108,11 +108,49 @@ The runner appends each completed episode immediately. Re-running the same comma
 
 ## Full confirmatory run
 
+Sequential execution:
+
 ```bash
 python scripts/run_v1_live.py --mode full --max-cost-usd 4.00
 ```
 
 A model override is allowed only for model slugs already frozen in `configs/v1_live.json`. Changing the model panel requires editing the protocol, which necessarily changes its fingerprint.
+
+## Deterministic sharding
+
+Long live runs can be partitioned by scenario without changing the protocol or its fingerprint. `--shard-count N` assigns scenario-list indices deterministically by `index mod N`, and `--shard-index` selects one disjoint partition.
+
+For example, four disjoint shards of one model are:
+
+```bash
+python scripts/run_v1_live.py --mode full \
+  --model google/gemini-2.5-flash-lite \
+  --shard-count 4 --shard-index 0 --max-cost-usd 0.25
+
+python scripts/run_v1_live.py --mode full \
+  --model google/gemini-2.5-flash-lite \
+  --shard-count 4 --shard-index 1 --max-cost-usd 0.25
+
+python scripts/run_v1_live.py --mode full \
+  --model google/gemini-2.5-flash-lite \
+  --shard-count 4 --shard-index 2 --max-cost-usd 0.25
+
+python scripts/run_v1_live.py --mode full \
+  --model google/gemini-2.5-flash-lite \
+  --shard-count 4 --shard-index 3 --max-cost-usd 0.25
+```
+
+For the frozen 24-scenario environments, four shards contain six Resource Commons worlds and six Delegation Boundaries scenarios each. Across all four shards the episode keys are exactly the same as one unsharded run. Sharding changes scheduling only.
+
+## Semantic invalid actions
+
+JSON-schema structured output guarantees shape and types, not that a live model will always choose a semantically admissible value. POLIS therefore treats semantic mistakes as agent behavior rather than infrastructure failures.
+
+- In Resource Commons, an action other than `request_resource` or a request without an amount becomes a zero-unit request for that agent and is counted as an invalid action.
+- In Delegation Boundaries, a `delegate` action with a missing or unknown agent identifier is recorded as an `environment_validation` failure, leaves the artifact unchanged, does not complete the task, and ends that episode.
+- Irrelevant optional fields on otherwise valid actions do not invalidate the action.
+
+Invalid-action counts are diagnostic outputs. They are not post hoc replacements for any pre-specified primary or secondary endpoint.
 
 ## Live-result files
 
@@ -133,9 +171,7 @@ python scripts/analyse_v1.py \
   --output results/analysis
 ```
 
-If results were intentionally split across multiple files under the same protocol, provide each JSONL file as a positional argument.
-
-The analysis script refuses to combine results whose protocol fingerprints do not match the supplied protocol.
+For a sharded run, supply every disjoint JSONL source file in one invocation. The analysis script rejects duplicate completion keys and refuses to combine results whose protocol fingerprints do not match the supplied protocol.
 
 ## Generated analysis artifacts
 
@@ -148,11 +184,11 @@ The analysis directory contains:
 - two primary figures in PNG and PDF
 - generated `RESULTS_SUMMARY.md`
 
-All statistical results are regenerated from source JSONL rather than manually maintained.
+`analysis.json` also reports invalid-action diagnostics by model and institution. All statistical results are regenerated from source JSONL rather than manually maintained.
 
 ## GitHub Actions live workflow
 
-The manual workflow `.github/workflows/v1-live.yml` provides the same pilot and full modes. It uploads the source JSONL, manifest, ledger, and generated analysis as a 90-day GitHub Actions artifact.
+The manual workflow `.github/workflows/v1-live.yml` provides pilot and full modes. It uploads the source JSONL, manifest, ledger, and generated analysis as a GitHub Actions artifact.
 
 The workflow is deliberately not triggered by pushes or pull requests because live inference costs money and uses a secret.
 
@@ -168,6 +204,7 @@ A result is fully attributable when the following are retained together:
 6. OpenRouter cost ledger
 7. generated analysis directory
 8. model slugs and routed provider metadata embedded in the model-call records
+9. shard index/count when execution was partitioned
 
 ## Re-analysis without API access
 
