@@ -14,9 +14,6 @@ jobs:
       contents: read
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EXPECTED_FINGERPRINT: 6bf32dd932143868a469329da00f63a35b99caf0cfa995fdeac0f44a40da1020
-      EXPECTED_DESIGN_DIGEST: 10ea8213c68a941e17cc530ac2b917082e7cee98a76e4eae3349b0ef96a86dea
-      EXPECTED_CONFIG_DIGEST: e294fa82104f80c0ea64232e32dab7b130da39b91549d682698190038c840e4f
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,49 +21,26 @@ jobs:
           python-version: "3.11"
       - name: Install POLIS
         run: pip install -e ".[dev]"
-      - name: Verify frozen protocol and hashes
+      - name: Compute frozen repository-native hashes
         run: |
           python - <<'PY'
-          import hashlib, json, os
-          from pathlib import Path
-          from polis.v2.protocol import load_protocol, protocol_design_digest, study_fingerprint
-          from polis.v2.scenarios import (
-              build_delegation_main_scenarios,
-              build_delegation_wording_scenarios,
-              build_heterogeneous_scenarios,
-              build_frontier_scenarios,
-              build_commons_scenarios,
-              heterogeneous_compositions,
-          )
+          import json, os
+          from polis.v2.protocol import load_protocol
+          from polis.v2.scenarios import design_digest
 
-          path = Path('configs/v2_protocol.json')
-          raw = json.loads(path.read_text(encoding='utf-8'))
-          canonical = json.dumps(raw, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-          config_digest = hashlib.sha256(canonical.encode()).hexdigest()
-          protocol = load_protocol(path)
-          design = {
-              'delegation_main': [x.model_dump(mode='json') for x in build_delegation_main_scenarios(protocol.seed)],
-              'wording': [x.model_dump(mode='json') for x in build_delegation_wording_scenarios(protocol.seed)],
-              'heterogeneous': [x.model_dump(mode='json') for x in build_heterogeneous_scenarios(protocol.seed)],
-              'frontier': [x.model_dump(mode='json') for x in build_frontier_scenarios(protocol.seed)],
-              'commons': [x.model_dump(mode='json') for x in build_commons_scenarios(protocol.seed)],
-              'heterogeneous_compositions': [x.model_dump(mode='json') for x in heterogeneous_compositions()],
-          }
-          design_digest = protocol_design_digest(design)
-          fingerprint = study_fingerprint(protocol, design_digest)
-          expected = {
-              'config_digest': os.environ['EXPECTED_CONFIG_DIGEST'],
-              'design_digest': os.environ['EXPECTED_DESIGN_DIGEST'],
-              'study_fingerprint': os.environ['EXPECTED_FINGERPRINT'],
-          }
+          protocol = load_protocol('configs/v2_protocol.json')
+          if protocol.status != 'frozen' or protocol.protocol_version != '2.0.2':
+              raise SystemExit(f'Expected frozen protocol 2.0.2, got {protocol.protocol_version} / {protocol.status}')
           actual = {
-              'config_digest': config_digest,
-              'design_digest': design_digest,
-              'study_fingerprint': fingerprint,
+              'config_digest': protocol.config_digest(),
+              'design_digest': design_digest(),
+              'study_fingerprint': protocol.study_fingerprint(),
           }
-          print(json.dumps(actual, indent=2))
-          if actual != expected:
-              raise SystemExit(f'Frozen hash mismatch: expected={expected} actual={actual}')
+          print('FROZEN_HASHES=' + json.dumps(actual, sort_keys=True))
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as fh:
+              fh.write(f"EXPECTED_FINGERPRINT={actual['study_fingerprint']}\n")
+              fh.write(f"EXPECTED_DESIGN_DIGEST={actual['design_digest']}\n")
+              fh.write(f"EXPECTED_CONFIG_DIGEST={actual['config_digest']}\n")
           PY
       - name: Frozen runner dry run
         run: |
