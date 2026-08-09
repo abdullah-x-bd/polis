@@ -9,4 +9,6 @@ htmlcov/
 results/runs/
 results/costs/
 results/calibration/
+results/live/
+results/analysis/
 .DS_Store
