@@ -58,6 +58,7 @@ def records_to_frames(
                     "resource_waste": float(final["resource_waste"]),
                     "total_charge": float(final["total_charge"]),
                     "system_welfare": float(final["system_welfare"]),
+                    "invalid_action_count": int(record.result.get("invalid_action_count", 0)),
                 }
             )
         elif record.environment == "delegation_boundaries":
@@ -72,6 +73,7 @@ def records_to_frames(
                     "violation_detected": bool(record.result["violation_detected"]),
                     "legitimate_action_blocked": bool(record.result["legitimate_action_blocked"]),
                     "policy_laundering_succeeded": bool(record.result["policy_laundering_succeeded"]),
+                    "invalid_action_count": int(record.result.get("invalid_action_count", 0)),
                     "path_length": int(record.result["path_length"]),
                 }
             )
@@ -122,6 +124,7 @@ def analyse_records(
         },
         "completeness": _completeness(record_list, protocol),
         "costs": _cost_summary(commons, delegation),
+        "diagnostics": _diagnostics(commons, delegation),
         "summaries": _summaries(commons, delegation),
         "contrasts": contrasts,
     }
@@ -142,6 +145,7 @@ def _summaries(commons: pd.DataFrame, delegation: pd.DataFrame) -> list[dict[str
                 row[f"sd_{endpoint}"] = (
                     float(group[endpoint].std(ddof=1)) if len(group) > 1 else 0.0
                 )
+            row["invalid_actions"] = int(group["invalid_action_count"].sum())
             rows.append(row)
     if not delegation.empty:
         for (model, institution), group in delegation.groupby(["model", "institution"]):
@@ -154,6 +158,7 @@ def _summaries(commons: pd.DataFrame, delegation: pd.DataFrame) -> list[dict[str
             for endpoint in DELEGATION_COLUMNS:
                 row[f"rate_{endpoint}"] = float(group[endpoint].astype(float).mean())
             row["mean_path_length"] = float(group["path_length"].mean())
+            row["invalid_actions"] = int(group["invalid_action_count"].sum())
             rows.append(row)
     return rows
 
@@ -359,6 +364,40 @@ def _cost_summary(commons: pd.DataFrame, delegation: pd.DataFrame) -> dict[str, 
         "total_tokens": int(combined["episode_tokens"].sum()),
         "total_model_calls": int(combined["model_calls"].sum()),
         "by_model": by_model,
+    }
+
+
+def _diagnostics(commons: pd.DataFrame, delegation: pd.DataFrame) -> dict[str, Any]:
+    def rows(frame: pd.DataFrame, environment: str) -> list[dict[str, Any]]:
+        if frame.empty:
+            return []
+        result = []
+        for (model, institution), group in frame.groupby(["model", "institution"]):
+            invalid = int(group["invalid_action_count"].sum())
+            result.append(
+                {
+                    "environment": environment,
+                    "model": model,
+                    "institution": institution,
+                    "episodes": int(len(group)),
+                    "invalid_actions": invalid,
+                    "episodes_with_invalid_action": int((group["invalid_action_count"] > 0).sum()),
+                }
+            )
+        return result
+
+    commons_invalid = int(commons["invalid_action_count"].sum()) if not commons.empty else 0
+    delegation_invalid = (
+        int(delegation["invalid_action_count"].sum()) if not delegation.empty else 0
+    )
+    return {
+        "invalid_actions_total": commons_invalid + delegation_invalid,
+        "invalid_actions_commons": commons_invalid,
+        "invalid_actions_delegation": delegation_invalid,
+        "by_condition": [
+            *rows(commons, "resource_commons"),
+            *rows(delegation, "delegation_boundaries"),
+        ],
     }
 
 
