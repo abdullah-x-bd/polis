@@ -1,0 +1,94 @@
+name: POLIS v2.0.2 live-run preflight
+
+on:
+  push:
+    branches: [polis-v2-full-run]
+    paths:
+      - .github/workflows/v2-full-preflight.yml
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EXPECTED_FINGERPRINT: 6bf32dd932143868a469329da00f63a35b99caf0cfa995fdeac0f44a40da1020
+      EXPECTED_DESIGN_DIGEST: 10ea8213c68a941e17cc530ac2b917082e7cee98a76e4eae3349b0ef96a86dea
+      EXPECTED_CONFIG_DIGEST: e294fa82104f80c0ea64232e32dab7b130da39b91549d682698190038c840e4f
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install POLIS
+        run: pip install -e ".[dev]"
+      - name: Verify frozen protocol and hashes
+        run: |
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from polis.v2.protocol import load_protocol, protocol_design_digest, study_fingerprint
+          from polis.v2.scenarios import (
+              build_delegation_main_scenarios,
+              build_delegation_wording_scenarios,
+              build_heterogeneous_scenarios,
+              build_frontier_scenarios,
+              build_commons_scenarios,
+              heterogeneous_compositions,
+          )
+
+          path = Path('configs/v2_protocol.json')
+          raw = json.loads(path.read_text(encoding='utf-8'))
+          canonical = json.dumps(raw, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+          config_digest = hashlib.sha256(canonical.encode()).hexdigest()
+          protocol = load_protocol(path)
+          design = {
+              'delegation_main': [x.model_dump(mode='json') for x in build_delegation_main_scenarios(protocol.seed)],
+              'wording': [x.model_dump(mode='json') for x in build_delegation_wording_scenarios(protocol.seed)],
+              'heterogeneous': [x.model_dump(mode='json') for x in build_heterogeneous_scenarios(protocol.seed)],
+              'frontier': [x.model_dump(mode='json') for x in build_frontier_scenarios(protocol.seed)],
+              'commons': [x.model_dump(mode='json') for x in build_commons_scenarios(protocol.seed)],
+              'heterogeneous_compositions': [x.model_dump(mode='json') for x in heterogeneous_compositions()],
+          }
+          design_digest = protocol_design_digest(design)
+          fingerprint = study_fingerprint(protocol, design_digest)
+          expected = {
+              'config_digest': os.environ['EXPECTED_CONFIG_DIGEST'],
+              'design_digest': os.environ['EXPECTED_DESIGN_DIGEST'],
+              'study_fingerprint': os.environ['EXPECTED_FINGERPRINT'],
+          }
+          actual = {
+              'config_digest': config_digest,
+              'design_digest': design_digest,
+              'study_fingerprint': fingerprint,
+          }
+          print(json.dumps(actual, indent=2))
+          if actual != expected:
+              raise SystemExit(f'Frozen hash mismatch: expected={expected} actual={actual}')
+          PY
+      - name: Frozen runner dry run
+        run: |
+          python scripts/run_v2.py \
+            --config configs/v2_protocol.json \
+            --output /tmp/polis-v2-preflight \
+            --dry-run \
+            --expected-fingerprint "$EXPECTED_FINGERPRINT"
+      - name: Inspect OpenRouter key budget safely
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          key = os.environ.get('OPENROUTER_API_KEY')
+          if not key:
+              raise SystemExit('OPENROUTER_API_KEY repository secret is not configured')
+          req = urllib.request.Request(
+              'https://openrouter.ai/api/v1/key',
+              headers={'Authorization': f'Bearer {key}'},
+          )
+          with urllib.request.urlopen(req, timeout=30) as r:
+              payload = json.load(r)
+          data = payload.get('data', payload)
+          safe = {k: data.get(k) for k in ('label','limit','usage','limit_remaining','usage_daily','usage_weekly','usage_monthly')}
+          print('OPENROUTER_KEY_SAFE=' + json.dumps(safe, sort_keys=True))
+          PY
