@@ -17,6 +17,7 @@ class ModelSpec(BaseModel):
     id: str
     family: str
     provider_family: str
+    reasoning_enabled: bool | None = None
 
 
 class V2Protocol(BaseModel):
@@ -56,6 +57,14 @@ class V2Protocol(BaseModel):
 
     def canonical_config(self) -> dict[str, object]:
         return self.model_dump(mode="json")
+
+    def reasoning_overrides(self) -> dict[str, bool]:
+        """Return only explicitly frozen per-model reasoning controls."""
+        return {
+            item.id: item.reasoning_enabled
+            for item in [*self.cheap_models, *self.frontier_models]
+            if item.reasoning_enabled is not None
+        }
 
     def config_digest(self) -> str:
         raw = json.dumps(self.canonical_config(), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
