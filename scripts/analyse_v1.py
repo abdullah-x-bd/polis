@@ -36,6 +36,13 @@ def main() -> None:
             f"Observed={sorted(fingerprints)}, expected={protocol.fingerprint()}"
         )
 
+    keys = [record.completion_key() for record in records]
+    if len(keys) != len(set(keys)):
+        raise SystemExit(
+            "Duplicate episode keys were found across the supplied result files. "
+            "Do not combine overlapping pilot/full files or repeated copies of the same run."
+        )
+
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
 
