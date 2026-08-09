@@ -1,0 +1,80 @@
+name: POLIS v1 live experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run the small pilot or the frozen full matrix
+        required: true
+        type: choice
+        options:
+          - pilot
+          - full
+        default: pilot
+      model:
+        description: Optional single frozen model slug; leave blank for all three models
+        required: false
+        default: ""
+      confirmation:
+        description: Type RUN_ROTATED_KEY to confirm the repository secret is a newly rotated OpenRouter key
+        required: true
+        default: ""
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install POLIS
+        run: pip install -e ".[dev]"
+      - name: Verify explicit paid-run gate
+        run: |
+          if [ "${{ inputs.confirmation }}" != "RUN_ROTATED_KEY" ]; then
+            echo "Refusing live inference. Re-run after rotating the exposed key and type RUN_ROTATED_KEY."
+            exit 1
+          fi
+          python - <<'PY'
+          import os
+          if not os.getenv("OPENROUTER_API_KEY"):
+              raise SystemExit("OPENROUTER_API_KEY repository secret is not configured")
+          print("OpenRouter secret is configured; secret value is not printed.")
+          PY
+      - name: Print frozen matrix plan
+        run: |
+          if [ -n "${{ inputs.model }}" ]; then
+            python scripts/run_v1_live.py --mode "${{ inputs.mode }}" --model "${{ inputs.model }}" --dry-run
+          else
+            python scripts/run_v1_live.py --mode "${{ inputs.mode }}" --dry-run
+          fi
+      - name: Run frozen live matrix
+        run: |
+          if [ "${{ inputs.mode }}" = "pilot" ]; then LIMIT="0.75"; else LIMIT="4.00"; fi
+          if [ -n "${{ inputs.model }}" ]; then
+            python scripts/run_v1_live.py --mode "${{ inputs.mode }}" --model "${{ inputs.model }}" --max-cost-usd "$LIMIT"
+          else
+            python scripts/run_v1_live.py --mode "${{ inputs.mode }}" --max-cost-usd "$LIMIT"
+          fi
+      - name: Analyse complete result files
+        if: success()
+        run: |
+          FILES=$(find results/live -maxdepth 1 -name '*.jsonl' ! -name 'openrouter_ledger.jsonl' -print)
+          python scripts/analyse_v1.py $FILES --output results/analysis
+      - name: Upload research artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: polis-v1-${{ inputs.mode }}-${{ github.run_id }}
+          path: |
+            results/live/*.jsonl
+            results/live/*.json
+            results/analysis/**
+          if-no-files-found: warn
+          retention-days: 90
