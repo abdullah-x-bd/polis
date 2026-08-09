@@ -80,6 +80,12 @@ For each model and treatment:
 
 The output includes both discordant counts so the direction of change is inspectable.
 
+## Semantic invalid-action diagnostics
+
+Live structured generation guarantees the schema shape but does not guarantee that a model will choose an action that is semantically available in the current environment. POLIS records these events rather than allowing them to abort the experiment.
+
+`invalid_action_count` is reported descriptively by model, environment, and institution. It is not a confirmatory endpoint and receives no hypothesis test or multiple-comparison correction. In Resource Commons, an invalid action deterministically becomes a zero request. In Delegation Boundaries, a missing or unknown delegate target is an environment-validation failure that leaves the artifact unchanged and ends the episode. This preserves the model's mistake as observed behavior without retroactively changing the pre-specified endpoint family.
+
 ## Multiple comparisons
 
 Holm adjustment is applied separately within each environment and endpoint across the model-by-treatment contrasts generated for that endpoint.
@@ -100,6 +106,8 @@ Two-sided 95 percent confidence intervals are used throughout.
 The preferred confirmatory dataset is a complete frozen matrix. If an episode fails because of a provider or infrastructure error, the resumable runner should be used to complete the missing key before analysis.
 
 The analysis pipeline does not impute missing episodes. A comparison uses only scenario keys containing both the baseline and the specified treatment, and `n_pairs` is reported for every contrast. A final report should disclose any contrast with fewer pairs than the frozen protocol expects.
+
+A semantic invalid action is an observed episode outcome, not missingness.
 
 ## Model repetitions
 
@@ -147,5 +155,6 @@ The v1 repository includes several checks that are logically prior to the live s
 - authorized sanitization paths
 - local-metadata versus immutable-provenance enforcement
 - tests ensuring immutable root policy is not leaked into the acting model observation
+- tests that semantically invalid live actions become deterministic observed failures rather than process crashes
 
 These establish mechanism behavior and benchmark validity. They must not be reported as model-behavior findings.
