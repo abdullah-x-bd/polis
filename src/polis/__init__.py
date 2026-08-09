@@ -5,6 +5,8 @@ from .environment import UnsafeDelegationEnvironment
 from .institutions import CodedDelegationRegulator, NoGovernance, PromptOnlyGuidance
 from .models import Action, Decision, TrialOutcome
 
+__version__ = "0.2.0"
+
 __all__ = [
     "Action",
     "Decision",
@@ -14,4 +16,5 @@ __all__ = [
     "NoGovernance",
     "PromptOnlyGuidance",
     "CodedDelegationRegulator",
+    "__version__",
 ]
