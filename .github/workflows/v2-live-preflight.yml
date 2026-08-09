@@ -1,10 +1,7 @@
 name: POLIS v2.0.6 live preflight
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/v2-live-preflight.yml
+  workflow_dispatch:
 
 jobs:
   preflight:
@@ -56,26 +53,14 @@ jobs:
           from polis.v2.protocol import load_protocol
 
           p = load_protocol('configs/v2_protocol.json')
-          expected = {
-              'delegation_main': 2304,
-              'wording_robustness': 1152,
-              'heterogeneous': 576,
-              'commons_salience': 960,
-              'frontier': 288,
-          }
+          expected = {'delegation_main':2304,'wording_robustness':1152,'heterogeneous':576,'commons_salience':960,'frontier':288}
           actual = {study: len(build_episode_specs(p, study)) for study in expected}
           print('STUDY_COUNTS=', actual)
           if actual != expected or sum(actual.values()) != 5280:
               raise SystemExit(f'Frozen study counts changed: {actual}')
           PY
           for study in delegation_main wording_robustness heterogeneous commons_salience frontier; do
-            python scripts/run_v2.py \
-              --protocol configs/v2_protocol.json \
-              --study "$study" \
-              --output /tmp/polis-v2-preflight \
-              --shard-index 0 \
-              --shard-count 24 \
-              --dry-run
+            python scripts/run_v2.py --protocol configs/v2_protocol.json --study "$study" --output /tmp/polis-v2-preflight --shard-index 0 --shard-count 24 --dry-run
           done
       - name: Inspect OpenRouter key budget safely
         run: |
@@ -87,16 +72,10 @@ jobs:
           key = os.environ.get('OPENROUTER_API_KEY')
           if not key:
               raise SystemExit('OPENROUTER_API_KEY repository secret is not configured')
-          req = urllib.request.Request(
-              'https://openrouter.ai/api/v1/key',
-              headers={'Authorization': f'Bearer {key}'},
-          )
+          req = urllib.request.Request('https://openrouter.ai/api/v1/key', headers={'Authorization': f'Bearer {key}'})
           with urllib.request.urlopen(req, timeout=30) as response:
               payload = json.load(response)
           data = payload.get('data', payload)
-          safe = {
-              name: data.get(name)
-              for name in ('label','limit','usage','limit_remaining','usage_daily','usage_weekly','usage_monthly')
-          }
+          safe = {name: data.get(name) for name in ('label','limit','usage','limit_remaining','usage_daily','usage_weekly','usage_monthly')}
           print('OPENROUTER_KEY_SAFE=' + json.dumps(safe, sort_keys=True))
           PY
