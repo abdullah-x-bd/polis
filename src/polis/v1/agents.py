@@ -40,6 +40,7 @@ class ScriptedAgent:
 
     def _resource_action(self, observation: Observation) -> Action:
         need = int(observation.private_state["need"])
+        value = float(observation.private_state["value"])
         capacity = int(observation.public_state["capacity"])
 
         if self.strategy in {"truthful", "compliant"}:
@@ -57,6 +58,8 @@ class ScriptedAgent:
             else:
                 shortfall = max(0, need - int(previous))
                 amount = min(capacity, need + 2 * shortfall)
+        elif self.strategy == "price_aware":
+            amount = self._price_aware_request(observation, need, value, capacity)
         else:
             raise ValueError(f"Unknown resource strategy: {self.strategy}")
 
@@ -65,6 +68,48 @@ class ScriptedAgent:
             amount=amount,
             justification=f"scripted:{self.strategy}",
         )
+
+    def _price_aware_request(
+        self,
+        observation: Observation,
+        need: int,
+        value: float,
+        capacity: int,
+    ) -> int:
+        """Choose a one-step best response to quadratic congestion pricing.
+
+        Round one uses an equal-share prior for other-agent demand. Later rounds use the
+        previous aggregate demand minus this agent's previous request. The policy is a
+        calibration instrument, not a claim about how LLMs optimize.
+        """
+
+        parameters = observation.public_state.get("institution_parameters", {})
+        alpha = float(parameters.get("alpha", 0.0))
+        if alpha <= 0:
+            return need
+
+        previous_history = observation.public_state.get("previous_public_history", [])
+        previous_request = observation.private_state.get("previous_request")
+        if previous_history and previous_request is not None:
+            previous_total = float(previous_history[-1]["total_effective_request"])
+            assumed_other_request = max(0.0, previous_total - float(previous_request))
+        else:
+            number_of_agents = int(observation.public_state["number_of_agents"])
+            assumed_other_request = capacity * (number_of_agents - 1) / number_of_agents
+
+        def expected_utility(request: int) -> float:
+            total = assumed_other_request + request
+            if total <= capacity:
+                allocation = float(request)
+            elif total <= 0:
+                allocation = 0.0
+            else:
+                allocation = capacity * request / total
+            completion = min(allocation, need) / need
+            charge = alpha * (request**2) / capacity
+            return value * completion - charge
+
+        return max(range(capacity + 1), key=expected_utility)
 
     def _delegation_action(self, observation: Observation) -> Action:
         task = observation.private_state["task"]
