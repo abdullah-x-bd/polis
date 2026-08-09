@@ -97,6 +97,7 @@ class ResourceCommonsEnvironment:
                         "capacity": self.world.capacity,
                         "number_of_agents": len(self.world.agents),
                         "institution_instruction": self.institution.instruction(self.world),
+                        "institution_parameters": self._institution_parameters(),
                         "previous_public_history": history,
                     },
                     private_state=private_state,
@@ -125,6 +126,16 @@ class ResourceCommonsEnvironment:
             rounds=round_results,
             oracle_welfare=oracle_welfare(self.world),
         )
+
+    def _institution_parameters(self) -> dict[str, float | int]:
+        parameters: dict[str, float | int] = {}
+        quota = getattr(self.institution, "quota", None)
+        alpha = getattr(self.institution, "alpha", None)
+        if quota is not None:
+            parameters["quota"] = int(quota)
+        if alpha is not None:
+            parameters["alpha"] = float(alpha)
+        return parameters
 
     def _settle_round(self, round_index: int, raw_requests: dict[str, int]) -> CommonsRoundResult:
         effective = {
