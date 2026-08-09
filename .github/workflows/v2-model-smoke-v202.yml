@@ -1,6 +1,13 @@
-name: POLIS v2.0.2 seven-model endpoint smoke
+name: POLIS v2.0.3 seven-model endpoint smoke
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - configs/v2_protocol.json
+      - src/polis/v1/actions.py
+      - src/polis/v1/providers/openrouter.py
+      - .github/workflows/v2-model-smoke-v202.yml
   workflow_dispatch:
 
 jobs:
@@ -17,7 +24,7 @@ jobs:
           - mistralai/mistral-small-2603
           - openai/gpt-4.1-mini
           - deepseek/deepseek-v4-flash
-          - qwen/qwen3.7-plus
+          - qwen/qwen3-235b-a22b-2507
           - anthropic/claude-sonnet-4.5
           - openai/gpt-5-mini
     env:
@@ -54,7 +61,7 @@ jobs:
           )
           observation = Observation(
               environment='compatibility_smoke',
-              episode_id='non-experimental-v202-smoke',
+              episode_id='non-experimental-v203-smoke',
               round_index=1,
               agent_id='agent_a',
               principal_id='principal_a',
