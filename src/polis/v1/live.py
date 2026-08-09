@@ -6,10 +6,11 @@ import json
 import os
 import platform
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
