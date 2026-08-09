@@ -14,6 +14,9 @@ jobs:
       contents: read
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EXPECTED_CONFIG_DIGEST: b947c916ace60ae3e64f5ca047b9bb10b10ce02b6151badd2c248838387e1aa5
+      EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
+      EXPECTED_FINGERPRINT: e49d69fb88fed250268aba7d9e9912b98bbb07cacbc114a1a0ba05e4480e44f2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,7 +24,7 @@ jobs:
           python-version: "3.11"
       - name: Install POLIS
         run: pip install -e ".[dev]"
-      - name: Compute frozen repository-native hashes
+      - name: Verify pinned frozen hashes
         run: |
           python - <<'PY'
           import json, os
@@ -29,26 +32,33 @@ jobs:
           from polis.v2.scenarios import design_digest
 
           protocol = load_protocol('configs/v2_protocol.json')
-          if protocol.status != 'frozen' or protocol.protocol_version != '2.0.2':
-              raise SystemExit(f'Expected frozen protocol 2.0.2, got {protocol.protocol_version} / {protocol.status}')
           actual = {
               'config_digest': protocol.config_digest(),
               'design_digest': design_digest(),
               'study_fingerprint': protocol.study_fingerprint(),
           }
+          expected = {
+              'config_digest': os.environ['EXPECTED_CONFIG_DIGEST'],
+              'design_digest': os.environ['EXPECTED_DESIGN_DIGEST'],
+              'study_fingerprint': os.environ['EXPECTED_FINGERPRINT'],
+          }
           print('FROZEN_HASHES=' + json.dumps(actual, sort_keys=True))
-          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as fh:
-              fh.write(f"EXPECTED_FINGERPRINT={actual['study_fingerprint']}\n")
-              fh.write(f"EXPECTED_DESIGN_DIGEST={actual['design_digest']}\n")
-              fh.write(f"EXPECTED_CONFIG_DIGEST={actual['config_digest']}\n")
+          if protocol.status != 'frozen' or protocol.protocol_version != '2.0.2':
+              raise SystemExit(f'Expected frozen protocol 2.0.2, got {protocol.protocol_version} / {protocol.status}')
+          if actual != expected:
+              raise SystemExit(f'Frozen hash mismatch: expected={expected} actual={actual}')
           PY
-      - name: Frozen runner dry run
+      - name: Dry-run all frozen studies
         run: |
-          python scripts/run_v2.py \
-            --config configs/v2_protocol.json \
-            --output /tmp/polis-v2-preflight \
-            --dry-run \
-            --expected-fingerprint "$EXPECTED_FINGERPRINT"
+          for study in delegation_main wording_robustness heterogeneous commons_salience frontier; do
+            python scripts/run_v2.py \
+              --protocol configs/v2_protocol.json \
+              --study "$study" \
+              --output /tmp/polis-v2-preflight \
+              --shard-index 0 \
+              --shard-count 24 \
+              --dry-run
+          done
       - name: Inspect OpenRouter key budget safely
         run: |
           python - <<'PY'
