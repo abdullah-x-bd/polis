@@ -1,10 +1,7 @@
 name: POLIS v2.0.6 realistic endpoint stress gate
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/v204-stress-smoke.yml
+  workflow_dispatch:
 
 jobs:
   preflight:
@@ -89,11 +86,7 @@ jobs:
           p = load_protocol('configs/v2_protocol.json')
           provider = OpenRouterProvider(
               cache=FileResponseCache('/tmp/cache'),
-              budget=BudgetTracker(
-                  max_cost_usd=.30,
-                  ledger_path='/tmp/ledger.jsonl',
-                  reserve_per_request_usd=.01,
-              ),
+              budget=BudgetTracker(max_cost_usd=.30, ledger_path='/tmp/ledger.jsonl', reserve_per_request_usd=.01),
               max_tokens=p.max_tokens,
               temperature=p.temperature,
               reasoning_overrides=p.reasoning_overrides(),
