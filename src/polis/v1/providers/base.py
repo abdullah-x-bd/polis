@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..actions import Action, Observation
 
@@ -25,10 +25,13 @@ class ModelResponse(BaseModel):
 
     model: str
     generation_id: str | None = None
+    provider_name: str | None = None
+    service_tier: str | None = None
     action: Action
     raw_text: str
     usage: ModelUsage
     cached: bool = False
+    response_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelProvider(Protocol):
