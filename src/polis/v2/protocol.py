@@ -46,7 +46,7 @@ class V2Protocol(BaseModel):
     seed: int = 20260810
 
     @model_validator(mode="after")
-    def _validate_models(self) -> "V2Protocol":
+    def _validate_models(self) -> V2Protocol:
         ids = [item.id for item in [*self.cheap_models, *self.frontier_models]]
         if len(ids) != len(set(ids)):
             raise ValueError("Model IDs must be unique across cheap and frontier panels")
