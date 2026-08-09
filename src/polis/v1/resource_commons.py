@@ -40,6 +40,7 @@ class CommonsRoundResult(BaseModel):
     overclaim_ratio: float
     resource_waste: float
     efficiency_ratio: float
+    invalid_action_count: int
 
 
 class CommonsEpisodeResult(BaseModel):
@@ -49,6 +50,7 @@ class CommonsEpisodeResult(BaseModel):
     institution: str
     rounds: list[CommonsRoundResult]
     oracle_welfare: float
+    invalid_action_count: int
 
 
 @dataclass
@@ -66,9 +68,11 @@ class ResourceCommonsEnvironment:
         history: list[dict[str, object]] = []
         round_results: list[CommonsRoundResult] = []
         previous_by_agent: dict[str, CommonsAgentOutcome] = {}
+        episode_invalid_actions = 0
 
         for round_index in range(1, rounds + 1):
             raw_requests: dict[str, int] = {}
+            round_invalid_actions = 0
             for spec in self.world.agents:
                 private_state: dict[str, object] = {"need": spec.need, "value": spec.value}
                 previous = previous_by_agent.get(spec.agent_id)
@@ -106,10 +110,20 @@ class ResourceCommonsEnvironment:
                 )
                 action = agents[spec.agent_id].act(observation)
                 if action.action != ActionType.REQUEST_RESOURCE or action.amount is None:
-                    raise ValueError(f"{spec.agent_id} did not return request_resource with amount")
-                raw_requests[spec.agent_id] = int(action.amount)
+                    # A structured model can still choose an action that is semantically
+                    # unavailable in this environment. The deterministic semantics of an
+                    # invalid Commons action are a zero request, not an infrastructure crash.
+                    raw_requests[spec.agent_id] = 0
+                    round_invalid_actions += 1
+                    episode_invalid_actions += 1
+                else:
+                    raw_requests[spec.agent_id] = int(action.amount)
 
-            result = self._settle_round(round_index, raw_requests)
+            result = self._settle_round(
+                round_index,
+                raw_requests,
+                invalid_action_count=round_invalid_actions,
+            )
             round_results.append(result)
             previous_by_agent = {row.agent_id: row for row in result.outcomes}
             history.append(
@@ -117,6 +131,7 @@ class ResourceCommonsEnvironment:
                     "round": round_index,
                     "total_effective_request": result.total_effective_request,
                     "system_welfare": result.system_welfare,
+                    "invalid_action_count": result.invalid_action_count,
                 }
             )
 
@@ -125,6 +140,7 @@ class ResourceCommonsEnvironment:
             institution=self.institution.name,
             rounds=round_results,
             oracle_welfare=oracle_welfare(self.world),
+            invalid_action_count=episode_invalid_actions,
         )
 
     def _institution_parameters(self) -> dict[str, float | int]:
@@ -137,7 +153,12 @@ class ResourceCommonsEnvironment:
             parameters["alpha"] = float(alpha)
         return parameters
 
-    def _settle_round(self, round_index: int, raw_requests: dict[str, int]) -> CommonsRoundResult:
+    def _settle_round(
+        self,
+        round_index: int,
+        raw_requests: dict[str, int],
+        invalid_action_count: int = 0,
+    ) -> CommonsRoundResult:
         effective = {
             agent_id: self.institution.effective_request(request, self.world)
             for agent_id, request in raw_requests.items()
@@ -197,6 +218,7 @@ class ResourceCommonsEnvironment:
             overclaim_ratio=overclaim / true_demand if true_demand else 0.0,
             resource_waste=waste,
             efficiency_ratio=welfare / oracle if oracle else 0.0,
+            invalid_action_count=invalid_action_count,
         )
 
 
@@ -233,6 +255,7 @@ def flatten_commons(results: Iterable[CommonsEpisodeResult]) -> list[dict[str, o
                     "overclaim_ratio": result.overclaim_ratio,
                     "resource_waste": result.resource_waste,
                     "total_charge": result.total_charge,
+                    "invalid_action_count": result.invalid_action_count,
                 }
             )
     return rows
