@@ -21,9 +21,16 @@ class OpenRouterProvider:
     The environment owns state and the provider performs exactly one structured model
     call for one observation. The outbound JSON Schema intentionally contains only the
     portable structural subset needed to describe an action. Semantic constraints such
-    as non-negative amounts and justification length remain enforced by Pydantic after
-    the response is returned.
+    as non-negative amounts remain enforced by Pydantic after the response is returned.
+
+    ``justification`` is explanatory metadata only. It is not used by an institution,
+    environment transition, metric, or score. Providers differ in whether they enforce
+    string-length keywords in structured-output schemas, so POLIS canonicalizes an
+    overlong justification to the already-defined local 500-character representation
+    before validation while preserving the complete provider text in ``raw_text``.
     """
+
+    JUSTIFICATION_MAX_CHARS = 500
 
     def __init__(
         self,
@@ -109,7 +116,7 @@ class OpenRouterProvider:
                 "OpenRouter returned an empty structured action "
                 f"for model={model!r}, finish_reason={finish_reason!r}"
             )
-        action = Action.model_validate_json(content)
+        action, justification_truncated = self._parse_action_content(content)
         usage = self._usage(raw.get("usage") or {})
 
         result = ModelResponse(
@@ -129,6 +136,8 @@ class OpenRouterProvider:
                 "portable_action_schema": True,
                 "response_healing": True,
                 "temperature_sent": self._send_temperature(model),
+                "justification_truncated": justification_truncated,
+                "justification_limit_chars": self.JUSTIFICATION_MAX_CHARS,
             },
         )
         self.budget.record(
@@ -144,10 +153,33 @@ class OpenRouterProvider:
                 "total_tokens": usage.total_tokens,
                 "request_sha256": self.cache.key(request_payload),
                 "temperature_sent": self._send_temperature(model),
+                "justification_truncated": justification_truncated,
             },
         )
         self.cache.put(request_payload, result.model_dump(mode="json"))
         return result
+
+    @classmethod
+    def _parse_action_content(cls, content: str) -> tuple[Action, bool]:
+        """Parse one action and canonicalize only overlong justification metadata.
+
+        The full provider text remains available in ``ModelResponse.raw_text``. No
+        action-bearing field is repaired here. All other Pydantic validation failures
+        propagate unchanged so semantic invalidity cannot be silently normalized.
+        """
+
+        payload = json.loads(content)
+        truncated = False
+        if isinstance(payload, dict):
+            justification = payload.get("justification")
+            if (
+                isinstance(justification, str)
+                and len(justification) > cls.JUSTIFICATION_MAX_CHARS
+            ):
+                payload = dict(payload)
+                payload["justification"] = justification[: cls.JUSTIFICATION_MAX_CHARS]
+                truncated = True
+        return Action.model_validate(payload), truncated
 
     @staticmethod
     def _strict_action_schema() -> dict[str, Any]:
@@ -156,8 +188,7 @@ class OpenRouterProvider:
         Provider structured-output implementations support different JSON Schema
         subsets. In particular, some reject numerical or string validation keywords.
         The wire schema therefore specifies structure, nullability, and the action enum
-        only. ``Action.model_validate_json`` remains the authoritative semantic
-        validator after generation.
+        only. Client-side validation remains authoritative for semantic constraints.
         """
 
         nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
