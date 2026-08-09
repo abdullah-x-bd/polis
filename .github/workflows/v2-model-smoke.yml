@@ -1,0 +1,42 @@
+name: POLIS v2 seven-model endpoint smoke
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        model:
+          - google/gemini-2.5-flash-lite
+          - mistralai/mistral-small-2603
+          - openai/gpt-4.1-mini
+          - deepseek/deepseek-v4-flash
+          - qwen/qwen3.7-max
+          - anthropic/claude-sonnet-5
+          - openai/gpt-5.5
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install POLIS
+        run: pip install -e ".[dev]"
+      - name: Verify secret
+        run: |
+          python - <<'PY'
+          import os
+          if not os.getenv('OPENROUTER_API_KEY'):
+              raise SystemExit('OPENROUTER_API_KEY repository secret is not configured')
+          print('Secret configured; value is not printed.')
+          PY
+      - name: One strict structured-output request
+        run: python scripts/test_openrouter.py --model "${{ matrix.model }}" --max-cost-usd 0.15
