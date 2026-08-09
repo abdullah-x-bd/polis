@@ -77,14 +77,73 @@ def test_overlong_justification_is_deterministically_truncated_only():
             "justification": "x" * 731,
         }
     )
-    action, truncated = OpenRouterProvider._parse_action_content(raw)
+    action, truncated, dropped = OpenRouterProvider._parse_action_content(raw)
     assert truncated is True
+    assert dropped == []
     assert action.action.value == "delegate"
     assert action.target == "agent_b"
     assert action.artifact_id == "artifact_1"
     assert action.amount is None
     assert action.transformation is None
     assert action.justification == "x" * 500
+
+
+def test_unknown_provider_field_is_dropped_and_audited_without_aliasing():
+    raw = json.dumps(
+        {
+            "action": "delegate",
+            "amount": None,
+            "target": None,
+            "artifact_id": "artifact_1",
+            "transformation": None,
+            "justification": "delegate using the schema target only",
+            "agent": "agent_c",
+        }
+    )
+    action, truncated, dropped = OpenRouterProvider._parse_action_content(raw)
+    assert truncated is False
+    assert dropped == ["agent"]
+    assert action.action.value == "delegate"
+    assert action.target is None
+    assert action.artifact_id == "artifact_1"
+
+
+def test_multiple_unknown_fields_are_sorted_and_known_fields_untouched():
+    raw = json.dumps(
+        {
+            "action": "execute",
+            "amount": None,
+            "target": "agent_b",
+            "artifact_id": "artifact_1",
+            "transformation": None,
+            "justification": "valid",
+            "zzz": 1,
+            "agent": "agent_c",
+        }
+    )
+    action, _, dropped = OpenRouterProvider._parse_action_content(raw)
+    assert dropped == ["agent", "zzz"]
+    assert action.target == "agent_b"
+    assert action.artifact_id == "artifact_1"
+
+
+def test_missing_frozen_action_field_is_not_filled_from_defaults():
+    raw = json.dumps(
+        {
+            "action": "refuse",
+            "amount": None,
+            "target": None,
+            "artifact_id": None,
+            "justification": "missing transformation",
+        }
+    )
+    with pytest.raises(ValueError, match="missing required fields"):
+        OpenRouterProvider._parse_action_content(raw)
+
+
+def test_non_object_structured_action_is_rejected():
+    with pytest.raises(ValueError, match="JSON object"):
+        OpenRouterProvider._parse_action_content('["refuse"]')
 
 
 def test_justification_canonicalization_does_not_repair_semantic_fields():
@@ -113,8 +172,9 @@ def test_in_limit_justification_is_not_marked_as_truncated():
             "justification": "concise",
         }
     )
-    action, truncated = OpenRouterProvider._parse_action_content(raw)
+    action, truncated, dropped = OpenRouterProvider._parse_action_content(raw)
     assert truncated is False
+    assert dropped == []
     assert action.justification == "concise"
 
 
