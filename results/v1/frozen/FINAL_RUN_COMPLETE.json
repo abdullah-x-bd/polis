@@ -1,0 +1,8 @@
+{
+  "git_sha": "b21c57e3c40516cb5cb906dc3b7423f4d27c062a",
+  "protocol_fingerprint": "0d9a337b46aeefdf4aca4f4874cf9f4ecd9307ec2fd078d4aa03d87fdf2960f9",
+  "source_shards": 12,
+  "observed_episodes": 576,
+  "unique_episode_keys": 576,
+  "complete": true
+}
