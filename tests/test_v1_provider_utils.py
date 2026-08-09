@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from polis.v1.providers.budget import BudgetExceeded, BudgetTracker
