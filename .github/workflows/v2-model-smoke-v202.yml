@@ -1,13 +1,7 @@
 name: POLIS v2.0.2 seven-model endpoint smoke
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - configs/v2_protocol.json
-      - src/polis/v1/actions.py
-      - src/polis/v1/providers/openrouter.py
-      - src/polis/v2/**
+  workflow_dispatch:
 
 jobs:
   smoke:
