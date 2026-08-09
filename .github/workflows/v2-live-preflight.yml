@@ -1,7 +1,10 @@
-name: POLIS v2.0.3 live preflight
+name: POLIS v2.0.6 live preflight
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/v2-live-preflight.yml
 
 jobs:
   preflight:
@@ -11,9 +14,9 @@ jobs:
       contents: read
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EXPECTED_CONFIG_DIGEST: 28c392732c6f3b9bd122d91d3397f87bf2ecaf21e7a832c588f4dff652b7260c
+      EXPECTED_CONFIG_DIGEST: e453a7ee1921986a248793ea1ec7236c1eb56f5fd4ab513b2a3c118ed48ccdb0
       EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
-      EXPECTED_FINGERPRINT: 26dbae58963f556f048e91fb30ce2130f6bfe1cadbced258e1fb38caec9d40a8
+      EXPECTED_FINGERPRINT: 2d8fb64e6c3d189469c881ba03595bd9facdfbe236c448048385709fb1ad229a
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,7 +27,8 @@ jobs:
       - name: Verify pinned frozen hashes
         run: |
           python - <<'PY'
-          import json, os
+          import json
+          import os
           from polis.v2.protocol import load_protocol
           from polis.v2.scenarios import design_digest
 
@@ -40,13 +44,30 @@ jobs:
               'study_fingerprint': os.environ['EXPECTED_FINGERPRINT'],
           }
           print('FROZEN_HASHES=' + json.dumps(actual, sort_keys=True))
-          if protocol.status != 'frozen' or protocol.protocol_version != '2.0.3':
-              raise SystemExit(f'Expected frozen protocol 2.0.3, got {protocol.protocol_version} / {protocol.status}')
+          if protocol.status != 'frozen' or protocol.protocol_version != '2.0.6':
+              raise SystemExit(f'Expected frozen protocol 2.0.6, got {protocol.protocol_version} / {protocol.status}')
           if actual != expected:
               raise SystemExit(f'Frozen hash mismatch: expected={expected} actual={actual}')
           PY
-      - name: Dry-run all frozen studies
+      - name: Dry-run all 5,280 frozen episodes
         run: |
+          python - <<'PY'
+          from polis.v2.live import build_episode_specs
+          from polis.v2.protocol import load_protocol
+
+          p = load_protocol('configs/v2_protocol.json')
+          expected = {
+              'delegation_main': 2304,
+              'wording_robustness': 1152,
+              'heterogeneous': 576,
+              'commons_salience': 960,
+              'frontier': 288,
+          }
+          actual = {study: len(build_episode_specs(p, study)) for study in expected}
+          print('STUDY_COUNTS=', actual)
+          if actual != expected or sum(actual.values()) != 5280:
+              raise SystemExit(f'Frozen study counts changed: {actual}')
+          PY
           for study in delegation_main wording_robustness heterogeneous commons_salience frontier; do
             python scripts/run_v2.py \
               --protocol configs/v2_protocol.json \
@@ -59,7 +80,10 @@ jobs:
       - name: Inspect OpenRouter key budget safely
         run: |
           python - <<'PY'
-          import json, os, urllib.request
+          import json
+          import os
+          import urllib.request
+
           key = os.environ.get('OPENROUTER_API_KEY')
           if not key:
               raise SystemExit('OPENROUTER_API_KEY repository secret is not configured')
@@ -67,9 +91,12 @@ jobs:
               'https://openrouter.ai/api/v1/key',
               headers={'Authorization': f'Bearer {key}'},
           )
-          with urllib.request.urlopen(req, timeout=30) as r:
-              payload = json.load(r)
+          with urllib.request.urlopen(req, timeout=30) as response:
+              payload = json.load(response)
           data = payload.get('data', payload)
-          safe = {k: data.get(k) for k in ('label','limit','usage','limit_remaining','usage_daily','usage_weekly','usage_monthly')}
+          safe = {
+              name: data.get(name)
+              for name in ('label','limit','usage','limit_remaining','usage_daily','usage_weekly','usage_monthly')
+          }
           print('OPENROUTER_KEY_SAFE=' + json.dumps(safe, sort_keys=True))
           PY
