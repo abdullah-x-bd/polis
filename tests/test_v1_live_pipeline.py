@@ -54,6 +54,18 @@ def test_full_plan_has_expected_episode_and_call_ceiling():
     assert plan.maximum_model_calls == 3456
 
 
+def test_four_shards_exactly_partition_full_matrix():
+    protocol = load_protocol("configs/v1_live.json")
+    plans = [
+        build_plan(protocol, "full", shard_index=index, shard_count=4)
+        for index in range(4)
+    ]
+    assert [plan.commons_worlds for plan in plans] == [6, 6, 6, 6]
+    assert [plan.delegation_scenarios for plan in plans] == [6, 6, 6, 6]
+    assert sum(plan.episodes for plan in plans) == 576
+    assert sum(plan.maximum_model_calls for plan in plans) == 3456
+
+
 def test_pilot_runner_is_resumable_and_analysis_ready(tmp_path: Path):
     protocol = load_protocol("configs/v1_live.json")
     model = protocol.models[0].id
@@ -73,7 +85,6 @@ def test_pilot_runner_is_resumable_and_analysis_ready(tmp_path: Path):
     assert len(records) == 28
     assert {record.protocol_fingerprint for record in records} == {protocol.fingerprint()}
 
-    # Running the same matrix again must skip all completed episode keys.
     second = run_live_matrix(
         protocol=protocol,
         provider=FakeProvider(),
