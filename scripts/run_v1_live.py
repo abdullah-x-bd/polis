@@ -22,11 +22,19 @@ def main() -> None:
     parser.add_argument("--model", action="append", dest="models")
     parser.add_argument("--run-id")
     parser.add_argument("--max-cost-usd", type=float)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     protocol = load_protocol(args.protocol)
-    plan = build_plan(protocol, args.mode, args.models)
+    plan = build_plan(
+        protocol,
+        args.mode,
+        args.models,
+        shard_index=args.shard_index,
+        shard_count=args.shard_count,
+    )
 
     print("Protocol fingerprint:", protocol.fingerprint())
     print(json.dumps(plan.to_dict(), indent=2))
@@ -61,6 +69,8 @@ def main() -> None:
         mode=args.mode,
         selected_models=args.models,
         run_id=args.run_id,
+        shard_index=args.shard_index,
+        shard_count=args.shard_count,
     )
     print(json.dumps(manifest.model_dump(mode="json"), indent=2))
     print(f"Cumulative recorded OpenRouter spend: ${budget.spent_usd:.6f}")
