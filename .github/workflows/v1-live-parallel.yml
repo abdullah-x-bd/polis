@@ -28,15 +28,21 @@ jobs:
           python-version: "3.11"
       - name: Install POLIS
         run: pip install -e ".[dev]"
-      - name: Validate shard plan
+      - name: Verify secret and shard plan
         run: |
+          python - <<'PY'
+          import os
+          if not os.getenv("OPENROUTER_API_KEY"):
+              raise SystemExit("OPENROUTER_API_KEY repository secret is not configured")
+          print("OpenRouter secret is configured; secret value is not printed.")
+          PY
           python scripts/run_v1_live.py \
             --mode full \
             --model "${{ matrix.model }}" \
             --shard-index "${{ matrix.shard }}" \
             --shard-count 4 \
             --dry-run
-      - name: Run paid shard
+      - name: Run paid shard with resumable retries
         run: |
           MODEL="${{ matrix.model }}"
           case "$MODEL" in
@@ -45,12 +51,24 @@ jobs:
             openai/*) LIMIT="0.60" ;;
             *) exit 2 ;;
           esac
-          python scripts/run_v1_live.py \
-            --mode full \
-            --model "$MODEL" \
-            --shard-index "${{ matrix.shard }}" \
-            --shard-count 4 \
-            --max-cost-usd "$LIMIT"
+
+          for ATTEMPT in 1 2 3; do
+            echo "POLIS shard attempt ${ATTEMPT}/3 for ${MODEL}, shard ${{ matrix.shard }}"
+            if python scripts/run_v1_live.py \
+              --mode full \
+              --model "$MODEL" \
+              --shard-index "${{ matrix.shard }}" \
+              --shard-count 4 \
+              --max-cost-usd "$LIMIT"; then
+              exit 0
+            fi
+            if [ "$ATTEMPT" -lt 3 ]; then
+              echo "Shard interrupted. Existing episode records and cost ledger will be resumed."
+              sleep 8
+            fi
+          done
+          echo "Shard did not complete after three resumable attempts."
+          exit 1
       - name: Prepare uniquely named shard artifacts
         if: always()
         run: |
