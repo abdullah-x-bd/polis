@@ -5,5 +5,8 @@ __pycache__/
 .coverage
 htmlcov/
 .env
+.cache/
 results/runs/
+results/costs/
+results/calibration/
 .DS_Store
