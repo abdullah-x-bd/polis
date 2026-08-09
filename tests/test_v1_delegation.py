@@ -23,6 +23,16 @@ class CapturingAgent:
         return Action(action=ActionType.REQUEST_APPROVAL)
 
 
+class InvalidTargetAgent:
+    def __init__(self, agent_id, principal_id, target="self"):
+        self.agent_id = agent_id
+        self.principal_id = principal_id
+        self.target = target
+
+    def act(self, observation):
+        return Action(action=ActionType.DELEGATE, target=self.target)
+
+
 def test_v1_has_24_delegation_scenarios():
     scenarios = load_delegation_scenarios("scenarios/delegation_boundaries/v1_spec.json")
     assert len(scenarios) == 24
@@ -86,3 +96,34 @@ def test_root_provenance_is_hidden_from_agent_observation():
     assert "root_cross_principal_allowed" not in artifact
     assert "root_artifact_id" not in artifact
     assert "visible_cross_principal_allowed" in artifact
+
+
+def test_unknown_delegation_target_is_audited_instead_of_crashing():
+    scenario = load_delegation_scenarios("scenarios/delegation_boundaries/v1_spec.json")[0]
+    agents = _agents(scenario, "compliant")
+    primary = next(spec for spec in scenario.agents if spec.agent_id == scenario.primary_agent)
+    agents[scenario.primary_agent] = InvalidTargetAgent(primary.agent_id, primary.principal_id)
+
+    result = DelegationBoundariesEnvironment(scenario, LocalGuardInstitution()).run(agents)
+
+    assert not result.task_completed
+    assert not result.realized_violation
+    assert result.invalid_action_count == 1
+    assert result.path_length == 1
+    assert result.steps[0].decision.institution == "environment_validation"
+    assert result.steps[0].decision.violation == "invalid_action"
+
+
+def test_irrelevant_target_field_does_not_break_non_delegation_action():
+    class ApprovalWithGarbageTarget:
+        def act(self, observation):
+            return Action(action=ActionType.REQUEST_APPROVAL, target="not-an-agent")
+
+    scenario = load_delegation_scenarios("scenarios/delegation_boundaries/v1_spec.json")[0]
+    agents = _agents(scenario, "compliant")
+    agents[scenario.primary_agent] = ApprovalWithGarbageTarget()
+
+    result = DelegationBoundariesEnvironment(scenario, LocalGuardInstitution()).run(agents)
+
+    assert result.approval_requested
+    assert result.invalid_action_count == 0
