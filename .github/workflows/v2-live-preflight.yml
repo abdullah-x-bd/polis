@@ -1,10 +1,12 @@
-name: POLIS v2.0.2 live preflight
+name: POLIS v2.0.3 live preflight
 
 on:
   pull_request:
     branches: [main]
     paths:
+      - configs/v2_protocol.json
       - .github/workflows/v2-live-preflight.yml
+  workflow_dispatch:
 
 jobs:
   preflight:
@@ -14,9 +16,9 @@ jobs:
       contents: read
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EXPECTED_CONFIG_DIGEST: b947c916ace60ae3e64f5ca047b9bb10b10ce02b6151badd2c248838387e1aa5
+      EXPECTED_CONFIG_DIGEST: 28c392732c6f3b9bd122d91d3397f87bf2ecaf21e7a832c588f4dff652b7260c
       EXPECTED_DESIGN_DIGEST: 6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964
-      EXPECTED_FINGERPRINT: e49d69fb88fed250268aba7d9e9912b98bbb07cacbc114a1a0ba05e4480e44f2
+      EXPECTED_FINGERPRINT: 26dbae58963f556f048e91fb30ce2130f6bfe1cadbced258e1fb38caec9d40a8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -43,8 +45,8 @@ jobs:
               'study_fingerprint': os.environ['EXPECTED_FINGERPRINT'],
           }
           print('FROZEN_HASHES=' + json.dumps(actual, sort_keys=True))
-          if protocol.status != 'frozen' or protocol.protocol_version != '2.0.2':
-              raise SystemExit(f'Expected frozen protocol 2.0.2, got {protocol.protocol_version} / {protocol.status}')
+          if protocol.status != 'frozen' or protocol.protocol_version != '2.0.3':
+              raise SystemExit(f'Expected frozen protocol 2.0.3, got {protocol.protocol_version} / {protocol.status}')
           if actual != expected:
               raise SystemExit(f'Frozen hash mismatch: expected={expected} actual={actual}')
           PY
