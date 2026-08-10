@@ -3,7 +3,9 @@ message: "If you use POLIS, please cite this software."
 title: "POLIS: Algorithmic Institutions for Multi-Agent AI Systems"
 type: software
 authors:
-  - name: "Project AWARE"
+  - family-names: "X"
+    given-names: "Abdullah"
+    affiliation: "Project AWARE"
 version: 0.3.0
 date-released: 2026-08-10
 repository-code: "https://github.com/abdullah-x-bd/polis"
