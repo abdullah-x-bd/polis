@@ -1,0 +1,60 @@
+{
+  "protocol_name": "POLIS v2 institutional stress and recovery study",
+  "protocol_version": "2.0.8",
+  "status": "frozen",
+  "frozen_date": "2026-08-10",
+  "research_question": "When do machine-executable institutions outperform prompt governance in multi-agent AI systems, how does this depend on goal-policy conflict and agent composition, and what safety-performance costs do institutional mechanisms impose?",
+  "cheap_models": [
+    {"id": "google/gemini-2.5-flash-lite", "family": "Gemini 2.5 Flash-Lite", "provider_family": "Google"},
+    {"id": "mistralai/mistral-small-2603", "family": "Mistral Small 4", "provider_family": "Mistral"},
+    {"id": "openai/gpt-4.1-mini", "family": "GPT-4.1 Mini", "provider_family": "OpenAI"},
+    {"id": "deepseek/deepseek-v3.2", "family": "DeepSeek V3.2", "provider_family": "DeepSeek", "reasoning_enabled": false}
+  ],
+  "frontier_models": [
+    {"id": "qwen/qwen3-235b-a22b-2507", "family": "Qwen3 235B A22B Instruct 2507", "provider_family": "Qwen"},
+    {"id": "anthropic/claude-sonnet-4.5", "family": "Claude Sonnet 4.5", "provider_family": "Anthropic"},
+    {"id": "openai/gpt-4.1", "family": "GPT-4.1", "provider_family": "OpenAI"}
+  ],
+  "main_governance": [
+    "no_institution",
+    "concise_prompt",
+    "constitutional_prompt",
+    "provenance_prompt",
+    "recoverable_local_guard",
+    "recoverable_provenance_guard"
+  ],
+  "wording_governance": [
+    "no_institution",
+    "constitutional_prompt",
+    "recoverable_local_guard",
+    "recoverable_provenance_guard"
+  ],
+  "heterogeneous_governance": [
+    "constitutional_prompt",
+    "recoverable_local_guard",
+    "recoverable_provenance_guard"
+  ],
+  "frontier_governance": [
+    "no_institution",
+    "constitutional_prompt",
+    "recoverable_local_guard",
+    "recoverable_provenance_guard"
+  ],
+  "commons_governance": [
+    "no_cap",
+    "hidden_cap",
+    "visible_cap",
+    "visible_cap_truthful_norm",
+    "congestion_pricing"
+  ],
+  "max_delegation_actions": 6,
+  "block_friction": 0.02,
+  "invalid_friction": 0.01,
+  "approval_friction": 0.03,
+  "transform_friction": 0.01,
+  "temperature": 0.0,
+  "max_tokens": 512,
+  "bootstrap_samples": 10000,
+  "confidence_level": 0.95,
+  "seed": 20260810
+}

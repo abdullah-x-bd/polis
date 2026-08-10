@@ -1,0 +1,12 @@
+# Documentation-only template. The actual paid smoke workflow is created only on a temporary
+# execution branch and is not merged into the research branch.
+name: POLIS v2 model smoke template
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inert:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Use the temporary v2 model-smoke execution branch for paid endpoint checks."

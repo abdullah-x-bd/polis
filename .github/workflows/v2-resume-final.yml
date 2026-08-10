@@ -1,0 +1,10 @@
+name: POLIS v2.0.7 recovery workflow sealed
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sealed:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "POLIS v2.0.7 is an excluded technical collection. This paid workflow is permanently sealed."

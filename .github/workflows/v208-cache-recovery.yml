@@ -1,0 +1,229 @@
+name: POLIS v2.0.8 zero-spend cache audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/v208-cache-recovery.yml
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    env:
+      EXPECTED_CONFIG_DIGEST: f72f6d683b88d1f11b7ec1d840413f805a619a5433ce431c445b16831aa3346b
+      EXPECTED_DESIGN_DIGEST: c5d6a750c495d14d0d745a9ee317cd40fa20ecd5c2e3e735fd74b195363182e8
+      EXPECTED_FINGERPRINT: f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install POLIS
+        run: pip install -e ".[dev]"
+      - name: Verify corrected frozen v2.0.8 design
+        run: |
+          python - <<'PY'
+          import os
+          from polis.v2.live import build_episode_specs
+          from polis.v2.protocol import load_protocol
+          from polis.v2.scenarios import HETEROGENEOUS_COMPOSITIONS, design_digest
+
+          p = load_protocol('configs/v2_protocol.json')
+          actual = {
+              'config': p.config_digest(),
+              'design': design_digest(),
+              'fingerprint': p.study_fingerprint(),
+          }
+          expected = {
+              'config': os.environ['EXPECTED_CONFIG_DIGEST'],
+              'design': os.environ['EXPECTED_DESIGN_DIGEST'],
+              'fingerprint': os.environ['EXPECTED_FINGERPRINT'],
+          }
+          if actual != expected or p.protocol_version != '2.0.8' or p.status != 'frozen':
+              raise SystemExit(f'Frozen v2.0.8 mismatch: actual={actual} expected={expected}')
+          counts = {
+              study: len(build_episode_specs(p, study))
+              for study in [
+                  'delegation_main', 'wording_robustness', 'heterogeneous',
+                  'commons_salience', 'frontier',
+              ]
+          }
+          if counts != {
+              'delegation_main': 2304,
+              'wording_robustness': 1152,
+              'heterogeneous': 576,
+              'commons_salience': 960,
+              'frontier': 288,
+          } or sum(counts.values()) != 5280:
+              raise SystemExit(f'Frozen episode-count mismatch: {counts}')
+          cheap = {item.id for item in p.cheap_models}
+          used = {
+              model
+              for composition in HETEROGENEOUS_COMPOSITIONS
+              for key, model in composition.items()
+              if key.startswith('agent_')
+          }
+          if not used <= cheap:
+              raise SystemExit(f'Heterogeneous model drift: {sorted(used - cheap)}')
+          print('FROZEN_V208_OK', actual, counts)
+          PY
+      - name: Download consolidated historical exact-response cache
+        uses: actions/download-artifact@v4
+        with:
+          name: polis-v207-cache-recovery-audit
+          path: sources/base
+          github-token: ${{ github.token }}
+          run-id: 31354324514
+      - name: Download additional responses from excluded v2.0.7 collection
+        uses: actions/download-artifact@v4
+        with:
+          pattern: polis-v207-final-batch-*
+          path: sources/v207-final
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: 31357100158
+      - name: Build admissible v2.0.8 exact-request cache without provider calls
+        run: |
+          python - <<'PY'
+          import json
+          import shutil
+          from collections import Counter
+          from pathlib import Path
+
+          from polis.v1.providers.cache import FileResponseCache
+          from polis.v1.providers.openrouter import OpenRouterProvider
+
+          target = Path('recovery-v208/cache')
+          target.mkdir(parents=True, exist_ok=True)
+          source_roots = [Path('sources/base'), Path('sources/v207-final')]
+          excluded_model = 'deepseek/deepseek-v4-flash'
+
+          candidates = []
+          skipped_noncache = 0
+          excluded_stale_model = 0
+          rejected = []
+          duplicate_identical = 0
+          duplicate_conflicting = 0
+          normalization = Counter()
+          models = Counter()
+
+          # Source order is chronological. For a duplicate request hash, retain the
+          # earliest admissible exact response and record later conflicts.
+          for source in source_roots:
+              for path in sorted(source.rglob('*.json')):
+                  try:
+                      payload = json.loads(path.read_text(encoding='utf-8'))
+                  except Exception:
+                      skipped_noncache += 1
+                      continue
+                  if not isinstance(payload, dict) or not {'request', 'response'} <= set(payload):
+                      skipped_noncache += 1
+                      continue
+                  request = payload.get('request')
+                  response = payload.get('response')
+                  if not isinstance(request, dict) or not isinstance(response, dict):
+                      skipped_noncache += 1
+                      continue
+                  candidates.append(path)
+
+                  request_model = request.get('model')
+                  if request_model == excluded_model:
+                      excluded_stale_model += 1
+                      continue
+
+                  expected_hash = FileResponseCache.key(request)
+                  recorded_hash = payload.get('request_sha256')
+                  if recorded_hash not in (None, expected_hash):
+                      rejected.append({'path': str(path), 'reason': 'request_hash_mismatch'})
+                      continue
+
+                  raw = response.get('raw_text') or ''
+                  try:
+                      action, truncated, dropped, filled = OpenRouterProvider._parse_action_content(raw)
+                  except Exception as exc:
+                      rejected.append({
+                          'request_sha256': expected_hash,
+                          'model': request_model,
+                          'reason': f'{type(exc).__name__}: {exc}',
+                      })
+                      continue
+
+                  response = dict(response)
+                  response['action'] = action.model_dump(mode='json')
+                  metadata = dict(response.get('response_metadata') or {})
+                  metadata.update({
+                      'revalidated_under_v208': True,
+                      'justification_truncated': truncated,
+                      'justification_limit_chars': OpenRouterProvider.JUSTIFICATION_MAX_CHARS,
+                      'dropped_extra_fields': dropped,
+                      'filled_missing_nullable_fields': filled,
+                  })
+                  response['response_metadata'] = metadata
+                  clean = {
+                      'request_sha256': expected_hash,
+                      'request': request,
+                      'response': response,
+                  }
+                  destination = target / f'{expected_hash}.json'
+                  serialized = json.dumps(clean, sort_keys=True, ensure_ascii=False) + '\n'
+                  if destination.exists():
+                      previous = json.loads(destination.read_text(encoding='utf-8'))
+                      if previous.get('response', {}).get('raw_text') == raw:
+                          duplicate_identical += 1
+                      else:
+                          duplicate_conflicting += 1
+                      continue
+                  destination.write_text(serialized, encoding='utf-8')
+                  models[str(request_model)] += 1
+                  normalization['truncated'] += int(truncated)
+                  normalization['dropped_fields'] += len(dropped)
+                  normalization['filled_nullable_fields'] += len(filled)
+
+          valid_files = sorted(target.glob('*.json'))
+          if not valid_files:
+              raise SystemExit('No admissible exact-response cache objects were recovered')
+          for path in valid_files:
+              payload = json.loads(path.read_text(encoding='utf-8'))
+              if payload['request'].get('model') == excluded_model:
+                  raise SystemExit('Obsolete DeepSeek model leaked into v2.0.8 cache')
+              if FileResponseCache.key(payload['request']) != path.stem:
+                  raise SystemExit(f'Cache filename/request mismatch: {path}')
+
+          summary = {
+              'protocol_version': '2.0.8',
+              'study_fingerprint': 'f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3',
+              'expected_episodes': 5280,
+              'provider_calls': 0,
+              'provider_spend_usd': 0.0,
+              'candidate_cache_records': len(candidates),
+              'admissible_unique_exact_requests': len(valid_files),
+              'excluded_obsolete_deepseek_v4_flash': excluded_stale_model,
+              'rejected_semantically_unusable_cache_records': rejected,
+              'duplicate_identical_requests': duplicate_identical,
+              'duplicate_conflicting_requests_kept_earliest': duplicate_conflicting,
+              'skipped_noncache_json_files': skipped_noncache,
+              'admissible_requests_by_model': dict(sorted(models.items())),
+              'normalization_counts': dict(normalization),
+              'coverage_note': 'This audit validates reusable exact requests only. Missing requests are intentionally filled by the paid v2.0.8 collector; no provider execution occurs here.',
+          }
+          Path('recovery-v208/cache-audit-summary.json').write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+      - name: Prove audit made no provider spend
+        run: |
+          test ! -e recovery-v208/ledger.jsonl
+          echo 'ZERO_SPEND_AUDIT=true'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polis-v208-admissible-cache
+          path: recovery-v208/
+          retention-days: 90
+          if-no-files-found: error

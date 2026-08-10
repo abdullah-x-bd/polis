@@ -1,0 +1,114 @@
+name: POLIS v2.0.8 frozen preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/v2-live-preflight.yml
+      - configs/v2_protocol.json
+      - src/polis/v2/scenarios.py
+      - tests/test_v2_protocol_alignment.py
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EXPECTED_CONFIG_DIGEST: f72f6d683b88d1f11b7ec1d840413f805a619a5433ce431c445b16831aa3346b
+      EXPECTED_DESIGN_DIGEST: c5d6a750c495d14d0d745a9ee317cd40fa20ecd5c2e3e735fd74b195363182e8
+      EXPECTED_FINGERPRINT: f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install POLIS
+        run: pip install -e ".[dev]"
+      - name: Verify exact frozen v2.0.8 hashes and model-panel alignment
+        run: |
+          python - <<'PY'
+          import os
+          from polis.v2.protocol import load_protocol
+          from polis.v2.scenarios import HETEROGENEOUS_COMPOSITIONS, design_digest
+
+          protocol = load_protocol('configs/v2_protocol.json')
+          actual = {
+              'config_digest': protocol.config_digest(),
+              'design_digest': design_digest(),
+              'study_fingerprint': protocol.study_fingerprint(),
+          }
+          expected = {
+              'config_digest': os.environ['EXPECTED_CONFIG_DIGEST'],
+              'design_digest': os.environ['EXPECTED_DESIGN_DIGEST'],
+              'study_fingerprint': os.environ['EXPECTED_FINGERPRINT'],
+          }
+          print('FROZEN_HASHES=' + str(actual))
+          if protocol.status != 'frozen' or protocol.protocol_version != '2.0.8':
+              raise SystemExit(f'Expected frozen v2.0.8, got {protocol.protocol_version}/{protocol.status}')
+          if actual != expected:
+              raise SystemExit(f'Frozen hashes changed: expected={expected} actual={actual}')
+          cheap = {item.id for item in protocol.cheap_models}
+          used = {
+              model
+              for composition in HETEROGENEOUS_COMPOSITIONS
+              for key, model in composition.items()
+              if key.startswith('agent_')
+          }
+          if not used <= cheap:
+              raise SystemExit(f'Heterogeneous panel drift: {sorted(used - cheap)}')
+          PY
+      - name: Validate protocol and provider tests
+        run: pytest -q tests/test_v1_provider_utils.py tests/test_v2.py tests/test_v2_edge_cases.py tests/test_v2_protocol_alignment.py
+      - name: Dry-run exactly 5,280 frozen episodes
+        run: |
+          python - <<'PY'
+          from polis.v2.live import build_episode_specs
+          from polis.v2.protocol import load_protocol
+
+          p = load_protocol('configs/v2_protocol.json')
+          expected = {
+              'delegation_main': 2304,
+              'wording_robustness': 1152,
+              'heterogeneous': 576,
+              'commons_salience': 960,
+              'frontier': 288,
+          }
+          actual = {study: len(build_episode_specs(p, study)) for study in expected}
+          print('STUDY_COUNTS=' + str(actual))
+          if actual != expected or sum(actual.values()) != 5280:
+              raise SystemExit(f'Frozen study counts changed: {actual}')
+          PY
+          for study in delegation_main wording_robustness heterogeneous commons_salience frontier; do
+            python scripts/run_v2.py --protocol configs/v2_protocol.json --study "$study" --output /tmp/polis-v2-preflight --shard-index 0 --shard-count 24 --dry-run
+          done
+      - name: Inspect OpenRouter key metadata safely
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          key = os.environ.get('OPENROUTER_API_KEY')
+          if not key:
+              raise SystemExit('OPENROUTER_API_KEY repository secret is not configured')
+          req = urllib.request.Request(
+              'https://openrouter.ai/api/v1/key',
+              headers={'Authorization': f'Bearer {key}'},
+          )
+          with urllib.request.urlopen(req, timeout=30) as response:
+              payload = json.load(response)
+          data = payload.get('data', payload)
+          safe = {
+              name: data.get(name)
+              for name in (
+                  'label', 'limit', 'usage', 'limit_remaining',
+                  'usage_daily', 'usage_weekly', 'usage_monthly',
+              )
+          }
+          print('OPENROUTER_KEY_SAFE=' + json.dumps(safe, sort_keys=True))
+          PY

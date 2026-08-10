@@ -1,0 +1,19 @@
+name: POLIS v2.0.8 final collection archived
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/v208-final-collection.yml
+
+jobs:
+  archived:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: |
+          echo "POLIS v2.0.8 confirmatory collection is complete and permanently sealed."
+          echo "Authoritative workflow run: 31359824031"
+          echo "Expected and observed episodes: 5280/5280"
+          echo "No provider calls are made by this archived workflow."

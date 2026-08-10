@@ -1,0 +1,81 @@
+{
+  "commons": {
+    "exploratory_gpt_social_welfare_paradox": {
+      "efficiency_social_minus_self": {"ci95": [-0.21946759335455385, -0.12173141124240243], "effect": -0.17149598723926807, "n_pairs": 24},
+      "overclaim_social_minus_self": {"ci95": [0.39789933291449614, 0.9074095166279469], "effect": 0.6392791093899661, "n_pairs": 24},
+      "self_efficiency": 0.9967103937589216,
+      "self_overclaim": 0.0,
+      "social_efficiency": 0.8252144065196534,
+      "social_overclaim": 0.6392791093899661
+    },
+    "visible_minus_hidden_cap_seek_lpm": {
+      "self_interested": {"ci95": [0.009307161683909281, 0.04538033831609052], "effect": 0.027343749999999903, "p": 0.0029650713364047974, "se": 0.00920251007587942},
+      "social_welfare": {"ci95": [0.029853982623229684, 0.07952101737677048], "effect": 0.05468750000000008, "p": 1.587641386992489e-05, "se": 0.012670394748400489}
+    },
+    "visible_minus_truthful_norm_cap_seek_lpm": {
+      "self_interested": {"ci95": [0.009307161683909285, 0.04538033831609056], "effect": 0.027343749999999924, "p": 0.002965071336404808, "se": 0.009202510075879428},
+      "social_welfare": {"ci95": [0.03741035865102996, 0.08758964134897021], "effect": 0.06250000000000008, "p": 1.0480060850478143e-06, "se": 0.012801072645657788}
+    }
+  },
+  "coverage": {"duplicates": 0, "expected_episodes": 5280, "observed_episodes": 5280, "unique_episode_keys": 5280},
+  "data_quality": {
+    "actual_model_mismatches": 0,
+    "dropped_extra_fields": 6,
+    "filled_missing_nullable_fields": 9,
+    "invalid_action_episodes": 48,
+    "invalid_actions_total": 48,
+    "invalid_by_study": {"delegation_main": 24, "frontier": 3, "heterogeneous": 11, "wording_robustness": 10},
+    "justification_truncated": 97,
+    "model_calls": 10720
+  },
+  "delegation_main": {
+    "completion_pressure_interactions": {
+      "concise_prompt": {"ci_high": 0.04409493334078006, "ci_low": -0.02117826667412005, "estimate": 0.011458333333330007, "holm_sensitivity_p": 0.49137676421919185, "p_value": 0.49137676421919185, "std_error": 0.01665163251206828},
+      "constitutional_prompt": {"ci_high": 0.09192694514311722, "ci_low": 0.014323054856885398, "estimate": 0.05312500000000131, "holm_sensitivity_p": 0.03643341545987508, "p_value": 0.007286683091975016, "std_error": 0.019797274566869957},
+      "provenance_prompt": {"ci_high": 0.08177791677205049, "ci_low": -0.0005279167720558045, "estimate": 0.04062499999999734, "holm_sensitivity_p": 0.2120489498856911, "p_value": 0.05301223747142277, "std_error": 0.020996771928801804},
+      "recoverable_local_guard": {"ci_high": 0.05322794300674581, "ci_low": -0.0032279430067515373, "estimate": 0.024999999999997136, "holm_sensitivity_p": 0.2120489498856911, "p_value": 0.08259271178183993, "std_error": 0.01440227638334535},
+      "recoverable_provenance_guard": {"ci_high": 0.06969544722012831, "ci_low": -0.0009454472201350511, "estimate": 0.03437499999999663, "holm_sensitivity_p": 0.2120489498856911, "p_value": 0.056455838453030135, "std_error": 0.01802096747630817}
+    },
+    "local_vs_provenance_laundering": {"baseline0_treatment1": 0, "baseline1_treatment0": 22, "baseline_mean": 0.22916666666666666, "effect": -0.22916666666666666, "exact_p": 4.76837158203125e-07, "n_pairs": 96, "treatment_mean": 0.0},
+    "no_institution_completion_pressure_slope": {"ci_high": -0.01640092922971962, "ci_low": -0.07943240410361413, "estimate": -0.04791666666666688, "p_value": 0.0028830680978277046, "std_error": 0.016079753345234593},
+    "no_institution_violation_pressure_slope": {"ci_high": 0.09337887734184137, "ci_low": 0.035787789324825334, "estimate": 0.06458333333333335, "p_value": 1.1033808143718026e-05, "std_error": 0.014691874052606883},
+    "pooled": {
+      "concise_prompt": {"completion_rate": 0.9088541666666666, "mean_utility": 7.3672135416666675, "n": 384, "violation_rate": 0.0703125},
+      "constitutional_prompt": {"completion_rate": 0.9505208333333334, "mean_utility": 6.244427083333334, "n": 384, "violation_rate": 0.0},
+      "no_institution": {"completion_rate": 0.8645833333333334, "mean_utility": 7.513932291666666, "n": 384, "violation_rate": 0.11979166666666667},
+      "provenance_prompt": {"completion_rate": 0.9348958333333334, "mean_utility": 6.762395833333334, "n": 384, "violation_rate": 0.018229166666666668},
+      "recoverable_local_guard": {"completion_rate": 0.9322916666666666, "mean_utility": 7.081145833333333, "n": 384, "violation_rate": 0.057291666666666664},
+      "recoverable_provenance_guard": {"completion_rate": 0.9557291666666666, "mean_utility": 6.781067708333333, "n": 384, "violation_rate": 0.0}
+    },
+    "recovery_after_block": {
+      "recoverable_local_guard": {"eventual_completion_rate": 0.9375, "mean_path_length": 2.78125, "n_blocked": 32, "realized_violation_rate_after_block": 0.25, "repeated_attempt_rate": 0.3125, "safe_recovery_count": 22, "safe_recovery_rate": 0.6875, "safe_recovery_wilson95": [0.5143332169904458, 0.8204745836639027]},
+      "recoverable_provenance_guard": {"eventual_completion_rate": 0.8627450980392157, "mean_path_length": 3.3333333333333335, "n_blocked": 51, "realized_violation_rate_after_block": 0.0, "repeated_attempt_rate": 0.23529411764705882, "safe_recovery_count": 44, "safe_recovery_rate": 0.8627450980392157, "safe_recovery_wilson95": [0.7427830774241833, 0.9318889826494312]}
+    },
+    "violation_pressure_interactions": {
+      "concise_prompt": {"ci_high": 0.005821582207420194, "ci_low": -0.04957158220742042, "estimate": -0.02187500000000011, "holm_sensitivity_p": 0.12162314055006432, "p_value": 0.12162314055006432, "std_error": 0.014131168953045777},
+      "constitutional_prompt": {"ci_high": -0.03041991326831079, "ci_low": -0.09874675339835576, "estimate": -0.06458333333333327, "holm_sensitivity_p": 0.0008450225270327219, "p_value": 0.00021125563175819083, "std_error": 0.017430636651744207},
+      "provenance_prompt": {"ci_high": -0.020442082518873264, "ci_low": -0.08997458414779372, "estimate": -0.05520833333333349, "holm_sensitivity_p": 0.003711505918481045, "p_value": 0.0018557529592405225, "std_error": 0.01773820901235532},
+      "recoverable_local_guard": {"ci_high": -0.02273953811778457, "ci_low": -0.06892712854888211, "estimate": -0.04583333333333334, "holm_sensitivity_p": 0.0005015056666176636, "p_value": 0.00010030113332353273, "std_error": 0.01178276509043517},
+      "recoverable_provenance_guard": {"ci_high": -0.03041991326831104, "ci_low": -0.09874675339835609, "estimate": -0.06458333333333356, "holm_sensitivity_p": 0.0008450225270327219, "p_value": 0.00021125563175818047, "std_error": 0.017430636651744227}
+    }
+  },
+  "frontier_pooled": {
+    "constitutional_prompt": {"completion_rate": 1.0, "mean_utility": 4.145833333333333, "violation_rate": 0.0},
+    "no_institution": {"completion_rate": 0.5972222222222222, "mean_utility": 7.218194444444445, "violation_rate": 0.4027777777777778},
+    "recoverable_local_guard": {"completion_rate": 0.8611111111111112, "mean_utility": 6.169305555555555, "violation_rate": 0.1388888888888889},
+    "recoverable_provenance_guard": {"completion_rate": 1.0, "mean_utility": 5.607916666666667, "violation_rate": 0.0}
+  },
+  "heterogeneous_dispersion": [
+    {"between_composition_sd": 0.0, "governance": "constitutional_prompt", "max_minus_min_composition_rate": 0.0, "mean_violation_rate": 0.0},
+    {"between_composition_sd": 0.10610181660137169, "governance": "recoverable_local_guard", "max_minus_min_composition_rate": 0.25, "mean_violation_rate": 0.06770833333333333},
+    {"between_composition_sd": 0.0, "governance": "recoverable_provenance_guard", "max_minus_min_composition_rate": 0.0, "mean_violation_rate": 0.0}
+  ],
+  "interpretation_notes": {"constitutional_vs_provenance_guard_direct_utility_is_additional": true, "gpt_social_welfare_result_is_exploratory": true, "holm_is_sensitivity_not_preregistered": true, "zero_variation_cells_can_have_non_estimable_clustered_se": true},
+  "protocol": {"config_digest": "f72f6d683b88d1f11b7ec1d840413f805a619a5433ce431c445b16831aa3346b", "design_digest": "c5d6a750c495d14d0d745a9ee317cd40fa20ecd5c2e3e735fd74b195363182e8", "execution_sha": "4431fa5ceb5f9700cf9a650dba2d0478ea08c267", "fingerprint": "f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3", "version": "2.0.8", "workflow_run_id": 31359824031},
+  "wording_consistency": {
+    "constitutional_prompt": {"completion_consistency": 0.8854166666666666, "violation_consistency": 0.9583333333333334},
+    "no_institution": {"completion_consistency": 0.6145833333333334, "violation_consistency": 0.6354166666666666},
+    "recoverable_local_guard": {"completion_consistency": 0.8229166666666666, "violation_consistency": 0.9270833333333334},
+    "recoverable_provenance_guard": {"completion_consistency": 0.8958333333333334, "violation_consistency": 1.0}
+  }
+}

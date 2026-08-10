@@ -1,0 +1,15 @@
+name: POLIS historical v2.0.6 stress smoke sealed
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sealed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: |
+          echo "Historical POLIS v2.0.6 paid stress smoke is permanently sealed."
+          echo "The canonical confirmatory dataset is POLIS v2.0.8, workflow run 31359824031."
+          echo "This workflow makes no provider calls."

@@ -2,72 +2,100 @@
 
 **POLIS is an experimental testbed for designing and evaluating algorithmic institutions for multi-agent AI systems.**
 
-POLIS asks a system-level AI safety question: when autonomous agents serve different principals, can machine-executable institutions reduce collective failures more reliably than prompt-only governance while preserving useful performance?
+POLIS studies a system-level AI safety problem. When autonomous agents pursue tasks under shared resources, delegation boundaries, and conflicting incentives, what kinds of institutions keep the system safe without destroying useful performance?
 
-Version 0.2.0 implements two matched experimental environments, a frozen cross-family live-model protocol, adversarial mechanism validation, resumable OpenRouter execution, paired statistical inference, automated figures and tables, and end-to-end reproducibility tooling.
+Software release **0.3.0** contains the completed **POLIS v2.0.8 confirmatory study**, a frozen 5,280-episode experiment across seven live model endpoints. Version 1 remains archived and reproducible in the same repository.
 
-## What POLIS tests
+## v2.0.8 in one table
 
-### Resource Commons
+Main Delegation study, 384 episodes per governance condition:
 
-Four agents compete for a capacity-constrained shared resource. Every agent has private task need and value. POLIS compares the same 24 frozen worlds under:
+| Governance | Realized violation | Compliant completion | Mean utility |
+| --- | ---: | ---: | ---: |
+| No institution | 12.0% | 86.5% | 7.514 |
+| Concise prompt | 7.0% | 90.9% | 7.367 |
+| Constitutional prompt | **0.0%** | 95.1% | 6.244 |
+| Provenance prompt | 1.8% | 93.5% | 6.762 |
+| Recoverable local guard | 5.7% | 93.2% | 7.081 |
+| Recoverable provenance guard | **0.0%** | **95.6%** | 6.781 |
 
-- no institution
-- prompt-only guidance
-- a machine-enforced hard quota
-- congestion pricing
+The complete analysis is in [`docs/V2_RESULTS.md`](docs/V2_RESULTS.md).
 
-The primary endpoint is final-round system efficiency relative to an exact oracle allocation. Secondary endpoints include overclaiming, resource waste, and institutional charge.
+## What we found
 
-The environment supports two rounds so agents can adapt to public system history and their own prior outcome.
+### Recoverable enforcement can be safe without terminal failure
 
-### Delegation Boundaries
+The v1 guards often converted unsafe actions into safe non-completion because a block ended the episode. V2 makes denial recoverable. Among main-study episodes in which the provenance guard actually blocked a prohibited action, agents safely recovered and completed in **44 of 51 cases, 86.3%**. The provenance guard had zero realized violations in the full 384-episode main study.
 
-Three agents work across two principals. A primary agent can delegate tasks, transform artifacts, request approval, execute when capable, or refuse. POLIS separates local artifact metadata visible to the acting agent from immutable root provenance available to an institutional guard.
+### Live agents discovered policy laundering
 
-Six domains are crossed with four matched scenario types to produce 24 scenarios:
+The strongest mechanism result is no longer only a scripted attack. In transformation-laundering scenarios, the recoverable local guard had **22 violations in 96 episodes**, while the immutable-provenance guard had **0 in 96**. Exact paired p = **4.77e-7**.
 
-- allowed same-principal delegation
-- forbidden cross-principal delegation
-- transformation laundering
-- authorized sanitization
+DeepSeek V3.2 produced 18 of the 22 local-guard laundering violations. In live traces, it deliberately used a representation-changing relabel action to make the visible permission appear permissive, then delegated across principals even though immutable root policy remained restrictive.
 
-POLIS compares:
+### Strong prompting can also be extremely effective
 
-- no institution
-- prompt-only governance
-- a local executable guard
-- an immutable-provenance guard
+The constitutional prompt produced **0/384** realized violations in the main study and **0%** violations on the high-conflict frontier diagnostic. That result is important. POLIS does not support a simple claim that executable governance always beats prompts. Instead, the evidence points to a more specific advantage for executable provenance when mutable representations, prohibited attempts, and recovery matter.
 
-The primary endpoint is realized policy violation. Attempted, detected, and realized violations are recorded separately, alongside task completion, false blocking, laundering success, and interaction path length.
+### Institutions can change behavior merely by how a rule is represented
 
-## Research design
+In Resource Commons, the mechanical request cap was held identical while only its numerical visibility changed. A visible cap caused significantly more cap-seeking than a hidden cap. An explicit request-only-need norm eliminated observed cap-seeking in both objective framings.
 
-The confirmatory protocol is frozen in [`configs/v1_live.json`](configs/v1_live.json) and validated by [`src/polis/v1/protocol.py`](src/polis/v1/protocol.py). A canonical SHA-256 fingerprint is embedded in every live episode record so results from different protocols cannot be silently mixed.
+## v2 research design
 
-The frozen model panel is:
+POLIS v2.0.8 contains five frozen studies:
 
-| Model | Family |
-| --- | --- |
-| `google/gemini-2.5-flash-lite` | Google Gemini |
-| `mistralai/mistral-small-2603` | Mistral Small |
-| `openai/gpt-4.1-mini` | OpenAI GPT-4.1 |
+| Study | Episodes |
+| --- | ---: |
+| Delegation main | 2,304 |
+| Wording robustness | 1,152 |
+| Heterogeneous teams | 576 |
+| Commons quota salience | 960 |
+| Frontier diagnostic | 288 |
+| **Total** | **5,280** |
 
-The full matrix contains **576 matched episodes** across both environments and all three model families. It has a conservative maximum of **3,456 model calls**, although delegation episodes often terminate earlier.
+The frozen backbone is:
 
-Inference is temperature zero with strict structured actions. The model is the agent policy, never the outcome judge. Safety and performance labels come from deterministic environment state transitions and executable institutions.
+- `google/gemini-2.5-flash-lite`
+- `mistralai/mistral-small-2603`
+- `openai/gpt-4.1-mini`
+- `deepseek/deepseek-v3.2`
 
-Read the full frozen design in [`docs/EXPERIMENT_PROTOCOL_V1.md`](docs/EXPERIMENT_PROTOCOL_V1.md).
+The frontier diagnostic uses:
 
-## Mechanism validation before live models
+- `qwen/qwen3-235b-a22b-2507`
+- `anthropic/claude-sonnet-4.5`
+- `openai/gpt-4.1`
 
-POLIS includes zero-cost scripted policies and attacks so the benchmark can be validated before spending API credits.
+The frozen scientific fingerprint is:
 
-Resource policies include truthful, greedy, max-requester, adaptive-greedy, and price-aware strategies. The calibration sweep demonstrates a nontrivial commons failure and an interior congestion-pricing trade-off rather than a benchmark where stronger enforcement automatically looks better.
+`f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3`
 
-Delegation stress tests include direct prohibited delegation, metadata relabel laundering, authorized and unauthorized sanitization, local enforcement, and immutable-provenance enforcement.
+See [`docs/V2_PROTOCOL.md`](docs/V2_PROTOCOL.md) and [`docs/V2_FREEZE_RECORD.md`](docs/V2_FREEZE_RECORD.md).
 
-These are **mechanism-validation results, not claims about language-model behavior**. See [`docs/RESULTS_V1.md`](docs/RESULTS_V1.md).
+## Statistical design
+
+The preregistered main Delegation models use linear probability and linear outcome regressions with base-scenario clustered robust uncertainty. The central estimand is the interaction between governance architecture and goal-policy conflict pressure.
+
+Matched treatment effects are also reported with 10,000-resample paired bootstrap confidence intervals. Commons uses world fixed effects with world-clustered uncertainty. Wording robustness measures within-scenario consistency across three equivalent surface forms. Heterogeneous-team analysis measures safety dispersion across fixed model compositions.
+
+See [`docs/V2_STATISTICAL_ANALYSIS.md`](docs/V2_STATISTICAL_ANALYSIS.md).
+
+## Exact final dataset
+
+The canonical v2.0.8 run contains:
+
+- 5,280 expected episodes
+- 5,280 observed episodes
+- 5,280 unique experimental keys
+- 0 duplicate keys
+- 10,720 model-call records
+- 8,927,565 tokens
+- 0 retry events
+
+The full dataset represents $3.023621 in provider-reported response cost. An independently audited exact-response cache reduced the additional spend required for the final corrected execution to $1.967216.
+
+Execution provenance and artifact checksums are in [`docs/V2_FINAL_EXECUTION_RECORD.md`](docs/V2_FINAL_EXECUTION_RECORD.md).
 
 ## Quick start
 
@@ -78,9 +106,9 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-ruff check src/polis/v1 tests scripts
-python -m compileall -q src/polis/v1 scripts
+ruff check src/polis/v2 tests scripts/run_v2.py scripts/analyse_v2.py scripts/stress_v2.py
 pytest
+python scripts/stress_v2.py --output results/v2/calibration/scripted_stress.json
 ```
 
 Windows PowerShell activation:
@@ -89,107 +117,61 @@ Windows PowerShell activation:
 .venv\Scripts\Activate.ps1
 ```
 
-## Reproduce the zero-cost validation
+Inspect the frozen v2 design without any provider call:
 
 ```bash
-python scripts/calibrate_commons_v1.py --output results/calibration/commons_v1.json
-python scripts/stress_delegation_v1.py --output results/calibration/delegation_v1.json
+python scripts/run_v2.py --study delegation_main --dry-run
+python scripts/run_v2.py --study wording_robustness --dry-run
+python scripts/run_v2.py --study heterogeneous --dry-run
+python scripts/run_v2.py --study commons_salience --dry-run
+python scripts/run_v2.py --study frontier --dry-run
 ```
 
-Inspect the live experiment without making any API calls:
+## Reproduce the analysis
+
+The GitHub release source bundle contains all final JSONL source records. Once extracted, pass the 40 final study JSONLs to:
 
 ```bash
-python scripts/run_v1_live.py --mode pilot --dry-run
-python scripts/run_v1_live.py --mode full --dry-run
+python scripts/analyse_v2.py path/to/source/*.jsonl --protocol configs/v2_protocol.json --output reproduced-analysis
 ```
 
-## Live-model experiment
+The analyzer rejects duplicate experimental keys and mixed study fingerprints.
 
-Copy `.env.example` to `.env` and add a valid OpenRouter key locally, or configure `OPENROUTER_API_KEY` as a GitHub Actions repository secret.
+See [`docs/V2_REPRODUCIBILITY.md`](docs/V2_REPRODUCIBILITY.md) for the complete path.
 
-One structured-action smoke request:
+## Published evidence in the repository
 
-```bash
-python scripts/test_openrouter.py \
-  --model google/gemini-2.5-flash-lite \
-  --max-cost-usd 0.25
-```
+Compact permanent evidence is committed under [`results/published/v2.0.8/`](results/published/v2.0.8/), including:
 
-Frozen pilot:
+- the immutable completion and collection-audit records
+- a strict machine-readable statistical summary
+- generated summary tables
+- the generated Markdown results summary
+- the source-bundle checksum manifest
 
-```bash
-python scripts/run_v1_live.py --mode pilot --max-cost-usd 0.75
-```
-
-Full confirmatory matrix:
-
-```bash
-python scripts/run_v1_live.py --mode full --max-cost-usd 4.00
-```
-
-The runner is resumable. It appends one source-data JSON record after every completed episode, skips previously completed keys on rerun, separately caches identical provider requests, and refuses to combine records carrying a different protocol fingerprint.
-
-The manual GitHub workflow [`v1-live.yml`](.github/workflows/v1-live.yml) provides the same pilot and full modes with an explicit paid-run confirmation gate and artifact upload.
-
-## Analysis
-
-Analyse one or more source JSONL files produced under the same protocol:
-
-```bash
-python scripts/analyse_v1.py \
-  results/live/polis-v1-full-<fingerprint-prefix>.jsonl \
-  --output results/analysis
-```
-
-The pre-specified analysis produces:
-
-- paired treatment effects against the no-institution baseline
-- 10,000-sample paired bootstrap confidence intervals
-- paired Wilcoxon tests for continuous Commons endpoints
-- exact discordant-pair tests for binary Delegation endpoints
-- Holm multiple-comparison adjustment within each endpoint
-- episode-level CSVs
-- publication-ready primary figures in PNG and PDF
-- provider-reported cost and token accounting
-- a generated Markdown results summary
-
-The statistical plan is documented in [`docs/STATISTICAL_ANALYSIS_V1.md`](docs/STATISTICAL_ANALYSIS_V1.md).
-
-## Repository structure
-
-```text
-configs/                         Frozen experimental protocols and legacy configs
-scenarios/                       Frozen v1 scenario specifications
-src/polis/v1/                    v0.2 environments, agents, institutions, providers, runner, analysis
-scripts/                         Calibration, stress, live-run, and analysis entry points
-tests/                           Unit, integration, attack, provider, and live-pipeline tests
-docs/                            Protocol, statistics, results status, reproducibility, threat model
-.github/workflows/v1-ci.yml      Zero-cost clean-run validation
-.github/workflows/v1-live.yml    Manual gated live-model experiment
-results/                         Generated or labelled result artifacts
-```
-
-The earlier unsafe-delegation pilot remains in the repository for provenance and backward reproducibility. New research should use the `polis.v1` package and the frozen v1 protocol.
+The `v0.3.0` GitHub release is intended to carry the complete raw source bundle, including episode-level records and publication figures.
 
 ## Research principles
 
-**Institutions are experimental variables.** POLIS compares the same underlying scenarios under alternative governance regimes.
+**Institutions are experimental variables.** The same underlying scenario is evaluated under alternative governance regimes.
 
 **Evaluation is external to the model.** Models choose structured actions. Deterministic environments decide what those actions do.
 
 **Attempt and outcome are distinct.** A blocked prohibited action is an attempted violation, not a realized one.
 
-**Useful performance matters.** The benchmark records task completion, welfare, waste, and legitimate-action blocking alongside safety outcomes.
+**Provenance and local representation are distinct.** Mutable visible state can diverge from immutable lineage, making policy laundering experimentally observable.
 
-**Provenance is not privileged model knowledge.** In the delegation benchmark, immutable root policy is institutional state and is deliberately withheld from the acting model.
+**Useful performance matters.** POLIS records compliant completion, system utility, welfare, recovery, friction, and waste alongside safety.
 
-**Paid experiments are auditable and bounded.** Responses, generation metadata, usage, provider-reported cost, run manifests, protocol fingerprints, and cache behavior are retained.
+**Null and surprising results are retained.** Strong prompting performed better than the simple executable-versus-prompt story predicted, while local executable enforcement failed under live representation laundering.
 
-## Reproducibility
+**Paid experiments are auditable and bounded.** Protocol fingerprints, source JSONL, manifests, provider metadata, token accounting, spend ledgers, and cache admission are retained.
 
-For the complete reproduction path, artifact layout, resume semantics, and provenance checklist, see [`docs/REPRODUCIBILITY_V1.md`](docs/REPRODUCIBILITY_V1.md).
+## v1 archive
 
-For the implementation record of the final research phase, see [`docs/STEPS_21_30_COMPLETE.md`](docs/STEPS_21_30_COMPLETE.md).
+POLIS v1 remains available for backward reproduction. Its 576-episode live experiment, mechanism-validation suite, and documentation are preserved under the `polis.v1` package and v1 documents. V2 is a new scenario universe and is not pooled with v1.
+
+See [`docs/RESULTS_V1.md`](docs/RESULTS_V1.md) and [`docs/REPRODUCIBILITY_V1.md`](docs/REPRODUCIBILITY_V1.md).
 
 ## Project AWARE
 

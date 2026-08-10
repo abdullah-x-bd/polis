@@ -2,6 +2,41 @@
 
 All notable POLIS research-platform changes are recorded here.
 
+## 0.3.0 - 2026-08-10
+
+### POLIS v2.0.8 confirmatory study
+
+- Added a fresh five-study institutional-governance design with 5,280 frozen episodes.
+- Added four optimization-pressure levels, recoverable enforcement, provenance-informed prompting, wording robustness, heterogeneous model societies, quota-salience experiments, and a frontier diagnostic.
+- Expanded the live panel to four backbone and three frontier endpoints after documented compatibility gates.
+- Added a frozen v2.0.8 protocol fingerprint, config digest, design digest, and exact per-study coverage gate.
+
+### Empirical findings
+
+- Completed 5,280/5,280 unique v2.0.8 episodes with zero duplicates and zero unexpected model IDs.
+- Found zero realized main-study violations under constitutional prompting and recoverable provenance enforcement.
+- Demonstrated recoverable provenance enforcement with 44 safe recoveries among 51 blocked prohibited attempts.
+- Observed live transformation laundering against the local guard in 22/96 matched laundering scenarios, versus 0/96 under provenance enforcement.
+- Found significant behavioral cap salience when the same mechanical quota was numerically visible rather than hidden.
+- Found strong wording and heterogeneous-composition robustness for provenance enforcement and constitutional prompting.
+- Added a clearly labelled exploratory GPT-4.1 Mini collective-action result under social-welfare framing.
+
+### Statistical analysis
+
+- Added scenario-clustered linear probability and utility models for governance x optimization pressure.
+- Added 10,000-resample matched bootstrap effects, conditional recovery analysis, wording consistency, composition dispersion, and world-clustered Commons models.
+- Added direct visible-versus-hidden quota-salience inference and conservative Holm sensitivity reporting without replacing preregistered primary p-values.
+- Added strict machine-readable final analysis summary and permanent compact result tables.
+
+### Reproducibility and audit
+
+- Added canonical execution, freeze, artifact, incident, and model-verification records.
+- Recorded 10,720 model-call records, 8,927,565 tokens, and provider cost accounting.
+- Audited exact-response cache admission under v2.0.8 before reuse and excluded obsolete or semantically invalid legacy responses.
+- Preserved the complete raw source bundle with SHA-256 verification for the GitHub release.
+- Sealed the final paid collector and historical paid smoke workflows after completion.
+- Rewrote the repository README around the completed v2.0.8 research release while preserving the v1 archive.
+
 ## 0.2.0 - 2026-08-09
 
 ### Research architecture

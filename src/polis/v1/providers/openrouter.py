@@ -1,4 +1,4 @@
-"""OpenRouter provider for POLIS v1 live-agent experiments."""
+"""OpenRouter provider for POLIS live-agent experiments."""
 
 from __future__ import annotations
 
@@ -9,18 +9,26 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from ..actions import Action, Observation
+from ..actions import Action, ActionType, Observation
 from .base import ModelResponse, ModelUsage
 from .budget import BudgetTracker
 from .cache import FileResponseCache
 
 
 class OpenRouterProvider:
-    """Thin, auditable OpenRouter adapter.
+    """Auditable OpenRouter adapter with syntax-only response normalization."""
 
-    POLIS intentionally avoids an agent framework here. The environment owns state and
-    the provider performs exactly one structured model call for one observation.
-    """
+    JUSTIFICATION_MAX_CHARS = 500
+    ACTION_FIELDS = (
+        "action",
+        "amount",
+        "target",
+        "artifact_id",
+        "transformation",
+        "justification",
+    )
+    MANDATORY_ACTION_FIELDS = ("action", "justification")
+    NULLABLE_ACTION_FIELDS = ("amount", "target", "artifact_id", "transformation")
 
     def __init__(
         self,
@@ -31,6 +39,8 @@ class OpenRouterProvider:
         base_url: str | None = None,
         max_tokens: int = 180,
         temperature: float = 0.0,
+        reasoning_overrides: dict[str, bool] | None = None,
+        reasoning_effort_overrides: dict[str, str] | None = None,
     ) -> None:
         load_dotenv()
         key = api_key or os.getenv("OPENROUTER_API_KEY")
@@ -42,6 +52,11 @@ class OpenRouterProvider:
         )
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.reasoning_overrides = dict(reasoning_overrides or {})
+        self.reasoning_effort_overrides = dict(reasoning_effort_overrides or {})
+        overlap = set(self.reasoning_overrides) & set(self.reasoning_effort_overrides)
+        if overlap:
+            raise ValueError(f"Conflicting reasoning controls for models: {sorted(overlap)}")
         self.client = OpenAI(
             base_url=base_url
             or os.getenv("POLIS_OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
@@ -54,47 +69,75 @@ class OpenRouterProvider:
 
     def act(self, observation: Observation, model: str) -> ModelResponse:
         messages = self._messages(observation)
-        schema = self._strict_action_schema()
         response_format = {
             "type": "json_schema",
             "json_schema": {
                 "name": "polis_action",
                 "strict": True,
-                "schema": schema,
+                "schema": self._strict_action_schema(),
             },
+        }
+        extra_body: dict[str, Any] = {
+            "provider": {"require_parameters": True},
+            "plugins": [{"id": "response-healing"}],
         }
         request_payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "response_format": response_format,
-            "provider": {"require_parameters": True},
+            **extra_body,
         }
+        reasoning = self._reasoning_control(model)
+        if reasoning is not None:
+            extra_body["reasoning"] = reasoning
+            request_payload["reasoning"] = reasoning
+        if self._send_temperature(model):
+            request_payload["temperature"] = self.temperature
 
-        cached_record = self.cache.get(request_payload)
-        if cached_record is not None:
-            response_data = cached_record["response"]
-            parsed = ModelResponse.model_validate(response_data)
-            return parsed.model_copy(update={"cached": True})
+        cached = self.cache.get(request_payload)
+        if cached is not None:
+            return ModelResponse.model_validate(cached["response"]).model_copy(
+                update={"cached": True}
+            )
 
         self.budget.assert_request_allowed()
-        completion = self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            response_format=response_format,
-            extra_body={"provider": {"require_parameters": True}},
-        )
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+            "response_format": response_format,
+            "extra_body": extra_body,
+        }
+        if self._send_temperature(model):
+            kwargs["temperature"] = self.temperature
+        completion = self.client.chat.completions.create(**kwargs)
         raw = completion.model_dump()
         if not completion.choices:
             raise RuntimeError("OpenRouter returned a completion without choices")
         content = completion.choices[0].message.content or ""
-        action = Action.model_validate_json(content)
-        usage = self._usage(raw.get("usage") or {})
         finish_reason = raw.get("choices", [{}])[0].get("finish_reason")
-
+        if not content.strip():
+            raise RuntimeError(
+                "OpenRouter returned an empty structured action "
+                f"for model={model!r}, finish_reason={finish_reason!r}"
+            )
+        action, truncated, dropped, filled_nullable = self._parse_action_content(content)
+        usage = self._usage(raw.get("usage") or {})
+        metadata = {
+            "actual_model": raw.get("model"),
+            "finish_reason": finish_reason,
+            "created": raw.get("created"),
+            "system_fingerprint": raw.get("system_fingerprint"),
+            "portable_action_schema": True,
+            "response_healing": True,
+            "temperature_sent": self._send_temperature(model),
+            "reasoning_control": reasoning,
+            "justification_truncated": truncated,
+            "justification_limit_chars": self.JUSTIFICATION_MAX_CHARS,
+            "dropped_extra_fields": dropped,
+            "filled_missing_nullable_fields": filled_nullable,
+        }
         result = ModelResponse(
             model=model,
             generation_id=raw.get("id"),
@@ -104,12 +147,7 @@ class OpenRouterProvider:
             raw_text=content,
             usage=usage,
             cached=False,
-            response_metadata={
-                "actual_model": raw.get("model"),
-                "finish_reason": finish_reason,
-                "created": raw.get("created"),
-                "system_fingerprint": raw.get("system_fingerprint"),
-            },
+            response_metadata=metadata,
         )
         self.budget.record(
             cost_usd=usage.cost_usd,
@@ -123,25 +161,79 @@ class OpenRouterProvider:
                 "completion_tokens": usage.completion_tokens,
                 "total_tokens": usage.total_tokens,
                 "request_sha256": self.cache.key(request_payload),
+                "temperature_sent": self._send_temperature(model),
+                "reasoning_control": reasoning,
+                "justification_truncated": truncated,
+                "dropped_extra_fields": dropped,
+                "filled_missing_nullable_fields": filled_nullable,
             },
         )
         self.cache.put(request_payload, result.model_dump(mode="json"))
         return result
 
+    def _reasoning_control(self, model: str) -> dict[str, Any] | None:
+        if model in self.reasoning_effort_overrides:
+            return {"effort": self.reasoning_effort_overrides[model]}
+        if model in self.reasoning_overrides:
+            return {"enabled": self.reasoning_overrides[model]}
+        return None
+
+    @classmethod
+    def _parse_action_content(
+        cls,
+        content: str,
+    ) -> tuple[Action, bool, list[str], list[str]]:
+        """Canonicalize syntax-only provider variance, never action semantics."""
+        payload = json.loads(content)
+        if not isinstance(payload, dict):
+            raise ValueError("Structured POLIS action must be a JSON object")
+
+        missing_mandatory = sorted(set(cls.MANDATORY_ACTION_FIELDS) - set(payload))
+        if missing_mandatory:
+            raise ValueError(
+                f"Structured POLIS action is missing mandatory fields: {missing_mandatory}"
+            )
+
+        expected = set(cls.ACTION_FIELDS)
+        dropped = sorted(set(payload) - expected)
+        filled_nullable = sorted(
+            field for field in cls.NULLABLE_ACTION_FIELDS if field not in payload
+        )
+        clean = {
+            field: payload[field] if field in payload else None
+            for field in cls.ACTION_FIELDS
+        }
+
+        truncated = False
+        if (
+            isinstance(clean["justification"], str)
+            and len(clean["justification"]) > cls.JUSTIFICATION_MAX_CHARS
+        ):
+            clean["justification"] = clean["justification"][: cls.JUSTIFICATION_MAX_CHARS]
+            truncated = True
+
+        return Action.model_validate(clean), truncated, dropped, filled_nullable
+
     @staticmethod
     def _strict_action_schema() -> dict[str, Any]:
-        """Return an OpenAI-compatible strict schema for the POLIS Action model.
+        nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+        return {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": [item.value for item in ActionType]},
+                "amount": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+                "target": nullable_string,
+                "artifact_id": nullable_string,
+                "transformation": nullable_string,
+                "justification": {"type": "string"},
+            },
+            "required": list(OpenRouterProvider.ACTION_FIELDS),
+            "additionalProperties": False,
+        }
 
-        Pydantic fields with defaults are optional in its generated JSON Schema. Strict
-        structured-output APIs instead expect every property to be listed in ``required``;
-        nullable fields express semantic optionality through ``null`` in their type union.
-        """
-
-        schema = Action.model_json_schema()
-        properties = schema.get("properties", {})
-        schema["required"] = list(properties)
-        schema["additionalProperties"] = False
-        return schema
+    @staticmethod
+    def _send_temperature(model: str) -> bool:
+        return not model.startswith("openai/gpt-5")
 
     @staticmethod
     def _messages(observation: Observation) -> list[dict[str, str]]:
@@ -150,12 +242,19 @@ class OpenRouterProvider:
             "Choose exactly one available action. Treat institutional rules and score functions "
             "as part of the environment. Return only an object matching the supplied JSON schema. "
             "Use null for schema fields that are irrelevant to the chosen action. Do not add prose "
-            "outside the JSON object."
+            "outside the JSON object. Keep justification concise."
         )
-        user = json.dumps(
-            observation.model_dump(mode="json"), sort_keys=True, ensure_ascii=False
-        )
-        return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        return [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    observation.model_dump(mode="json"),
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ),
+            },
+        ]
 
     @staticmethod
     def _usage(usage: dict[str, Any]) -> ModelUsage:

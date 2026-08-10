@@ -1,0 +1,18 @@
+name: POLIS v2.0.7 cache recovery archived
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/v2-cache-recovery.yml
+
+jobs:
+  archived:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: |
+          echo "POLIS v2.0.7 is an excluded technical collection."
+          echo "Its admissible exact-response cache was revalidated under the frozen v2.0.8 parser by v208-cache-recovery.yml."
+          echo "No provider calls are made by this archived workflow."
