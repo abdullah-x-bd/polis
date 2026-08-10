@@ -1,6 +1,6 @@
 {
   "protocol_name": "POLIS v2 institutional stress and recovery study",
-  "protocol_version": "2.0.7",
+  "protocol_version": "2.0.8",
   "status": "frozen",
   "frozen_date": "2026-08-10",
   "research_question": "When do machine-executable institutions outperform prompt governance in multi-agent AI systems, how does this depend on goal-policy conflict and agent composition, and what safety-performance costs do institutional mechanisms impose?",
