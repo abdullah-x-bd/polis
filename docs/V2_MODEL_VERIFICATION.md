@@ -1,44 +1,30 @@
 # POLIS v2 Model Endpoint Verification
 
-POLIS v2 uses a strict structured-action interface. A model is eligible for confirmatory collection only if a live OpenRouter compatibility request succeeds under the same provider adapter and strict JSON-schema response format used by the experiment runner.
+POLIS requires every live model endpoint to satisfy the same strict structured-action interface used by the experiment runner. Endpoint compatibility checks are technical gates, not behavioral research outcomes.
 
-## First compatibility gate
+## Historical compatibility repairs
 
-The original seven-model panel was tested after the zero-cost v2 design had passed CI.
+Earlier v2 protocol versions encountered endpoint-specific incompatibilities, including empty structured output under bounded reasoning and unavailable or unsupported frontier interfaces. These failures occurred during technical execution work and triggered documented protocol-version changes rather than silent substitutions. Historical version-specific model-panel files are retained for auditability.
 
-Passed:
+## Final frozen v2.0.8 panel
+
+Backbone:
 
 - `google/gemini-2.5-flash-lite`
 - `mistralai/mistral-small-2603`
 - `openai/gpt-4.1-mini`
-- `deepseek/deepseek-v4-flash`
+- `deepseek/deepseek-v3.2`, reasoning disabled
 
-Technically incompatible at the time of the gate:
+Frontier diagnostic:
 
-- `qwen/qwen3.7-max` returned an empty completion body under the strict action request.
-- `anthropic/claude-sonnet-5` had no OpenRouter endpoint able to satisfy the required structured-output parameters.
-- `openai/gpt-5.5` failed the strict compatibility smoke.
+- `qwen/qwen3-235b-a22b-2507`
+- `anthropic/claude-sonnet-4.5`
+- `openai/gpt-4.1`
 
-No confirmatory v2 research episodes were collected before these failures were observed. The failures are therefore infrastructure/model-interface compatibility information, not behavioral outcomes.
+The final frozen preflight independently checked model-panel alignment, exact protocol/config/design hashes, provider adapter tests, and the complete 5,280-episode dry-run before the canonical execution.
 
-## Replacement rule
+## Final execution validation
 
-A pre-collection endpoint substitution is allowed only when the frozen endpoint cannot satisfy the required machine interface. A substitution must:
+Workflow run `31359824031` produced exactly 5,280 unique v2.0.8 episodes with no unexpected model IDs. The post-run audit also found zero routed-model identity mismatches among 10,720 model-call records.
 
-1. occur before any confirmatory v2 episode is collected,
-2. preserve the intended provider/model-family role where practicable,
-3. be documented explicitly,
-4. trigger a protocol version increment and a new study fingerprint,
-5. pass the same seven-model smoke before paid collection begins.
-
-## v2.0.1 replacement panel
-
-The three failed frontier endpoints were replaced by currently available endpoints whose OpenRouter model metadata exposes the output-format capability required by POLIS:
-
-- Qwen role: `qwen/qwen3.7-plus`
-- Anthropic role: `anthropic/claude-sonnet-4.5`
-- OpenAI frontier role: `openai/gpt-5-mini`
-
-The four cheap backbone models are unchanged.
-
-The resulting seven-model panel must pass a fresh live compatibility smoke before the v2.0.1 fingerprint is treated as the executable confirmatory protocol.
+The final paid collection and historical paid smoke workflows are sealed after completion.
