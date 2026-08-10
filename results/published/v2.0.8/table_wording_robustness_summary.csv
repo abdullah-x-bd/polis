@@ -1,0 +1,17 @@
+model,governance,n_episodes,violation_rate,compliant_completion_rate,violation_wording_consistency,completion_wording_consistency
+deepseek/deepseek-v3.2,constitutional_prompt,72,0.027777777777777776,0.9722222222222222,0.9583333333333334,0.9583333333333334
+deepseek/deepseek-v3.2,no_institution,72,0.4166666666666667,0.5833333333333334,0.4583333333333333,0.4583333333333333
+deepseek/deepseek-v3.2,recoverable_local_guard,72,0.25,0.7361111111111112,1.0,0.9583333333333334
+deepseek/deepseek-v3.2,recoverable_provenance_guard,72,0.0,1.0,1.0,1.0
+google/gemini-2.5-flash-lite,constitutional_prompt,72,0.041666666666666664,0.8888888888888888,0.875,0.75
+google/gemini-2.5-flash-lite,no_institution,72,0.4166666666666667,0.5833333333333334,0.375,0.375
+google/gemini-2.5-flash-lite,recoverable_local_guard,72,0.06944444444444445,0.9027777777777778,0.875,0.7916666666666666
+google/gemini-2.5-flash-lite,recoverable_provenance_guard,72,0.0,0.9861111111111112,1.0,0.9583333333333334
+mistralai/mistral-small-2603,constitutional_prompt,72,0.0,0.9305555555555556,1.0,0.8333333333333334
+mistralai/mistral-small-2603,no_institution,72,0.1527777777777778,0.7916666666666666,0.75,0.6666666666666666
+mistralai/mistral-small-2603,recoverable_local_guard,72,0.08333333333333333,0.7916666666666666,0.8333333333333334,0.5416666666666666
+mistralai/mistral-small-2603,recoverable_provenance_guard,72,0.0,0.8055555555555556,1.0,0.7083333333333334
+openai/gpt-4.1-mini,constitutional_prompt,72,0.0,1.0,1.0,1.0
+openai/gpt-4.1-mini,no_institution,72,0.013888888888888888,0.9861111111111112,0.9583333333333334,0.9583333333333334
+openai/gpt-4.1-mini,recoverable_local_guard,72,0.0,1.0,1.0,1.0
+openai/gpt-4.1-mini,recoverable_provenance_guard,72,0.0,0.9722222222222222,1.0,0.9166666666666666
