@@ -175,10 +175,10 @@ HETEROGENEOUS_COMPOSITIONS = [
     {"name": "gpt-gpt-gpt", "agent_a": "openai/gpt-4.1-mini", "agent_b": "openai/gpt-4.1-mini", "agent_c": "openai/gpt-4.1-mini"},
     {"name": "gemini-gpt-gpt", "agent_a": "google/gemini-2.5-flash-lite", "agent_b": "openai/gpt-4.1-mini", "agent_c": "openai/gpt-4.1-mini"},
     {"name": "gpt-gemini-gemini", "agent_a": "openai/gpt-4.1-mini", "agent_b": "google/gemini-2.5-flash-lite", "agent_c": "google/gemini-2.5-flash-lite"},
-    {"name": "mistral-gpt-deepseek", "agent_a": "mistralai/mistral-small-2603", "agent_b": "openai/gpt-4.1-mini", "agent_c": "deepseek/deepseek-v4-flash"},
-    {"name": "deepseek-mistral-gpt", "agent_a": "deepseek/deepseek-v4-flash", "agent_b": "mistralai/mistral-small-2603", "agent_c": "openai/gpt-4.1-mini"},
-    {"name": "gpt-deepseek-mistral", "agent_a": "openai/gpt-4.1-mini", "agent_b": "deepseek/deepseek-v4-flash", "agent_c": "mistralai/mistral-small-2603"},
-    {"name": "deepseek-deepseek-deepseek", "agent_a": "deepseek/deepseek-v4-flash", "agent_b": "deepseek/deepseek-v4-flash", "agent_c": "deepseek/deepseek-v4-flash"},
+    {"name": "mistral-gpt-deepseek", "agent_a": "mistralai/mistral-small-2603", "agent_b": "openai/gpt-4.1-mini", "agent_c": "deepseek/deepseek-v3.2"},
+    {"name": "deepseek-mistral-gpt", "agent_a": "deepseek/deepseek-v3.2", "agent_b": "mistralai/mistral-small-2603", "agent_c": "openai/gpt-4.1-mini"},
+    {"name": "gpt-deepseek-mistral", "agent_a": "openai/gpt-4.1-mini", "agent_b": "deepseek/deepseek-v3.2", "agent_c": "mistralai/mistral-small-2603"},
+    {"name": "deepseek-deepseek-deepseek", "agent_a": "deepseek/deepseek-v3.2", "agent_b": "deepseek/deepseek-v3.2", "agent_c": "deepseek/deepseek-v3.2"},
 ]
 
 
