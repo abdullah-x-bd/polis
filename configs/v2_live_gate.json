@@ -1,0 +1,12 @@
+{
+  "armed": true,
+  "status": "armed",
+  "protocol_version": "2.0.7",
+  "config_digest": "05548c19126ebf1a71262ecd7675404d35b7c3f003f8eef19ef0ae3c827b756f",
+  "design_digest": "6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964",
+  "study_fingerprint": "911c55b1d71e29b9ef1d1addc7131a4edbe2ecbb4a63fd87a7f423009a0686be",
+  "expected_episodes": 5280,
+  "max_total_cost_usd": 2.2,
+  "cache_seed_source_run": "31340543634",
+  "note": "One-shot final confirmatory execution. Exact-request response cache may be replayed from the excluded technical v2.0.6 run. Excluded episode outcomes are never imported."
+}
