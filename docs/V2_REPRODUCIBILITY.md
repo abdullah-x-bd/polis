@@ -1,8 +1,19 @@
-# POLIS v2 Reproducibility
+# POLIS v2.0.8 Reproducibility
 
 ## Scientific firewall
 
-POLIS v1 is frozen at `archive/polis-v1-frozen`. V2 lives in separate code and uses new scenario identifiers, new protocol fingerprinting, and separate result directories.
+POLIS v1 is frozen separately. V2 uses fresh scenario identifiers, a new machine-readable protocol, new fingerprints, and separate result artifacts. V1 and v2 episode outcomes are not pooled.
+
+## Final identifiers
+
+- protocol version `2.0.8`
+- fingerprint `f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3`
+- config digest `f72f6d683b88d1f11b7ec1d840413f805a619a5433ce431c445b16831aa3346b`
+- design digest `c5d6a750c495d14d0d745a9ee317cd40fa20ecd5c2e3e735fd74b195363182e8`
+- canonical execution SHA `4431fa5ceb5f9700cf9a650dba2d0478ea08c267`
+- canonical workflow run `31359824031`
+
+The execution SHA is intentionally different from later documentation/release SHAs. Scientific outcomes were collected against the frozen execution commit.
 
 ## Install
 
@@ -15,13 +26,13 @@ pip install -e ".[dev]"
 ## Zero-cost validation
 
 ```bash
-ruff check src/polis/v2 tests/test_v2.py scripts/run_v2.py scripts/analyse_v2.py scripts/stress_v2.py
+ruff check src/polis/v2 tests scripts/run_v2.py scripts/analyse_v2.py scripts/stress_v2.py
 python -m compileall -q src/polis/v2 scripts/run_v2.py scripts/analyse_v2.py scripts/stress_v2.py
-pytest tests/test_v2.py
+pytest
 python scripts/stress_v2.py --output results/v2/calibration/scripted_stress.json
 ```
 
-## Inspect the complete design without API calls
+## Inspect the frozen study matrix without API calls
 
 ```bash
 python scripts/run_v2.py --study delegation_main --dry-run
@@ -31,82 +42,56 @@ python scripts/run_v2.py --study commons_salience --dry-run
 python scripts/run_v2.py --study frontier --dry-run
 ```
 
-The dry-run output includes the protocol version, study fingerprint, deterministic design digest, exact episode count, call ceiling, model/composition list, and governance treatments.
+Expected sizes are 2,304, 1,152, 576, 960, and 288 respectively. Total expected episodes are 5,280.
 
-## Protocol freeze
+## Reproduce the final statistical analysis
 
-Paid v2 execution is blocked while `configs/v2_protocol.json` has `status: draft`.
+Download and extract the exact `v0.3.0` source-bundle release asset. Its expected ZIP SHA-256 is:
 
-After zero-cost validation:
+`9f0eb0db21e32a0e72f266069634899af5814589608426504acbce9414c3064c`
 
-1. change status to `frozen`
-2. insert the freeze date
-3. commit that exact protocol
-4. record the generated study fingerprint and design digest in `docs/V2_FREEZE_RECORD.md`
-5. run CI again against the frozen commit
-6. make no substantive design change under the same protocol version
-
-## Live execution
-
-Set `OPENROUTER_API_KEY` locally or configure it as a GitHub Actions repository secret.
-
-Example shard:
+The extracted bundle contains 40 final study JSONL files under `source/`, plus manifests and ledgers. Re-run:
 
 ```bash
-python scripts/run_v2.py \
-  --study delegation_main \
-  --shard-index 0 \
-  --shard-count 16 \
-  --max-cost-usd 0.50
+mapfile -t SOURCES < <(find source -type f -name 'polis-v208-final-*.jsonl' | sort)
+python scripts/analyse_v2.py "${SOURCES[@]}" --protocol configs/v2_protocol.json --output reproduced-analysis
 ```
 
-The runner writes one JSONL record immediately after each episode and resumes completed experimental keys when restarted with the same shard definition.
+On PowerShell, collect the files and pass them explicitly to `scripts/analyse_v2.py`. No provider key or new model call is required for reanalysis.
+
+The analyzer rejects mixed study fingerprints and duplicate experimental keys.
+
+## Canonical completeness checks
+
+The final collection audit passed before analysis:
+
+- 5,280 expected episodes
+- 5,280 observed episodes
+- 5,280 unique experimental keys
+- 0 duplicate keys
+- exact per-study counts
+- protocol version 2.0.8 throughout
+- one frozen fingerprint throughout
+- no unexpected model IDs
+
+## Exact-response cache provenance
+
+The final execution used an audited cache to avoid paying twice for byte-for-byte equivalent provider requests. The cache audit made zero provider calls. It admitted 3,596 v2.0.8-compatible exact response objects, excluded 43 objects associated with the obsolete `deepseek-v4-flash` interface, and rejected one response that did not satisfy final semantic validation.
+
+Cache admission was based on request identity and interface/semantic validity, not on favorable or unfavorable scientific outcomes. The final 5,280 episode records were reconstructed under v2.0.8.
 
 ## Source records
 
-Every record stores:
+Every episode stores protocol version, fingerprint, study, scenario, governance, model composition, deterministic environment result, model responses, generation/provider metadata, token usage, provider-reported cost, and completion timestamp. Manifests preserve execution SHA, Python/platform information, shard definition, and expected/completed episode counts.
 
-- protocol version
-- study fingerprint
-- study name
-- scenario ID
-- governance condition
-- homogeneous model or heterogeneous composition name
-- complete deterministic environment result
-- every model response used in the episode
-- raw structured output
-- generation ID
-- routed provider metadata when returned
-- input/output/reasoning/cache token accounting when returned
-- provider-reported API cost
-- completion timestamp
+## Provider normalization
 
-The accompanying manifest stores Git commit SHA in GitHub Actions, Python/platform information, shard definition, expected/completed episode counts and maximum-call ceiling.
+The final parser uses a portable structured-action schema across providers. Free-text `justification` metadata has an existing 500-character local representation limit. If a provider returns a longer justification, it is deterministically truncated before local Pydantic validation while the full raw provider text remains retained. This field does not determine institutional permissions, environment transitions, safety labels, task completion, or welfare.
 
-## Analyze
+The final source contains 97 such truncations, 9 filled missing nullable fields, 6 dropped extra fields, zero routed-model mismatches, and 48 semantic invalid actions handled by the deterministic environment.
 
-```bash
-python scripts/analyse_v2.py results/v2/live/*.jsonl --output results/v2/analysis
-```
+## Published artifacts
 
-The analysis refuses mixed study fingerprints and duplicate experimental keys.
+`results/published/v2.0.8/` contains compact permanent evidence suitable for repository browsing. The GitHub release asset carries the complete raw source records, episode-level tables, generated figures, manifests, and ledgers.
 
-Generated artifacts include:
-
-- `analysis.json`
-- one episode CSV per study
-- CSV result tables
-- delegation pressure-violation curves
-- delegation pressure-completion curves
-- institutional safety-performance figure
-- quota-salience figure
-- heterogeneous-composition heatmap
-- generated `RESULTS_SUMMARY.md`
-
-## Exact-coverage rule
-
-A final v2 result is complete only when every episode in all studies selected by the frozen protocol is present exactly once. The final GitHub workflow performs this coverage check before generating the combined analysis artifact.
-
-## Provider prices
-
-Provider prices are intentionally not part of the scientific fingerprint. Actual provider-reported cost is stored for each request because model pricing can change independently of the frozen scientific design. Model slugs themselves are part of the frozen protocol.
+See `V2_FINAL_EXECUTION_RECORD.md` and `V2_EXECUTION_INCIDENT_2026-08-10.md` for the audit trail.
