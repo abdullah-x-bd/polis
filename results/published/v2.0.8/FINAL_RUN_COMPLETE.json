@@ -1,0 +1,26 @@
+{
+  "audited_bootstrap_cache_artifact_id": 9051840187,
+  "audited_bootstrap_cache_run_id": 31359535850,
+  "complete": true,
+  "counts_by_study": {
+    "commons_salience": 960,
+    "delegation_main": 2304,
+    "frontier": 288,
+    "heterogeneous": 576,
+    "wording_robustness": 1152
+  },
+  "expected_episodes": 5280,
+  "hard_parallel_budget_ceiling_usd": 10.0,
+  "head_sha": "4431fa5ceb5f9700cf9a650dba2d0478ea08c267",
+  "incremental_paid_calls_in_v208_final_run": 6217,
+  "incremental_provider_spend_usd_in_v208_final_run": 1.9672164125499942,
+  "observed_episodes": 5280,
+  "protocol_version": "2.0.8",
+  "provider_reported_response_cost_usd_in_dataset": 3.0236210483599897,
+  "retry_events": 0,
+  "study_fingerprint": "f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3",
+  "total_model_calls_in_dataset": 10720,
+  "total_tokens_in_dataset": 8927565,
+  "unique_episode_keys": 5280,
+  "workflow_run_id": 31359824031
+}
