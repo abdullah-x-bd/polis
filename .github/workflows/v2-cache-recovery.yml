@@ -1,0 +1,220 @@
+name: POLIS v2.0.7 cache recovery audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/v2-cache-recovery.yml
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install POLIS
+        run: pip install -e ".[dev]"
+      - name: Download earliest v2 technical caches
+        uses: actions/download-artifact@v4
+        with:
+          pattern: polis-v2-batch-*
+          path: cache-sources/run-31337384458
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: 31337384458
+      - name: Download second v2 technical caches
+        uses: actions/download-artifact@v4
+        with:
+          pattern: polis-v2-batch-*
+          path: cache-sources/run-31337778389
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: 31337778389
+      - name: Download v2.0.3 technical caches
+        uses: actions/download-artifact@v4
+        with:
+          pattern: polis-v203-batch-*
+          path: cache-sources/run-31338657577
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: 31338657577
+      - name: Download v2.0.6 technical caches
+        uses: actions/download-artifact@v4
+        with:
+          pattern: polis-v206-batch-*
+          path: cache-sources/run-31340543634
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: 31340543634
+      - name: Download exhausted v2.0.7 execution caches
+        uses: actions/download-artifact@v4
+        with:
+          pattern: polis-v207-batch-*
+          path: cache-sources/run-31353948708
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: 31353948708
+      - name: Merge exact-request caches chronologically
+        run: |
+          mkdir -p recovery/cache
+          for source in \
+            cache-sources/run-31337384458 \
+            cache-sources/run-31337778389 \
+            cache-sources/run-31338657577 \
+            cache-sources/run-31340543634 \
+            cache-sources/run-31353948708; do
+            if [ -d "$source/cache" ]; then
+              cp -an "$source/cache"/. recovery/cache/
+            fi
+          done
+          echo "UNIQUE_CACHE_OBJECTS=$(find recovery/cache -type f -name '*.json' | wc -l)"
+      - name: Audit every frozen episode independently with zero network budget
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from collections import Counter
+          from pathlib import Path
+
+          from polis.v1.model_agents import ModelAgent
+          from polis.v1.providers.budget import BudgetExceeded, BudgetTracker
+          from polis.v1.providers.cache import FileResponseCache
+          from polis.v1.providers.openrouter import OpenRouterProvider
+          from polis.v2.commons import QuotaSalienceEnvironment
+          from polis.v2.delegation import RecoverableDelegationEnvironment
+          from polis.v2.live import build_episode_specs
+          from polis.v2.models import CommonsRegime, GovernanceRegime
+          from polis.v2.protocol import load_protocol
+          from polis.v2.scenarios import design_digest
+
+          expected_fp = '911c55b1d71e29b9ef1d1addc7131a4edbe2ecbb4a63fd87a7f423009a0686be'
+          expected_design = '6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964'
+          protocol = load_protocol('configs/v2_protocol.json')
+          if protocol.study_fingerprint() != expected_fp or design_digest() != expected_design:
+              raise SystemExit('Frozen v2.0.7 design changed before cache audit')
+
+          budget = BudgetTracker(
+              max_cost_usd=0.000001,
+              ledger_path=Path('recovery/zero-spend-ledger.jsonl'),
+              reserve_per_request_usd=0.01,
+          )
+          provider = OpenRouterProvider(
+              cache=FileResponseCache('recovery/cache'),
+              budget=budget,
+              api_key='cache-only-no-network',
+              max_tokens=protocol.max_tokens,
+              temperature=protocol.temperature,
+              reasoning_overrides=protocol.reasoning_overrides(),
+              reasoning_effort_overrides=protocol.reasoning_effort_overrides(),
+          )
+
+          def principal_for(scenario, agent_id):
+              for item in scenario.agents:
+                  if item.agent_id == agent_id:
+                      return getattr(item, 'principal_id', item.agent_id)
+              raise ValueError(agent_id)
+
+          studies = [
+              'delegation_main',
+              'wording_robustness',
+              'heterogeneous',
+              'commons_salience',
+              'frontier',
+          ]
+          complete = []
+          missing = []
+          calls = 0
+          calls_by_model = Counter()
+
+          for study in studies:
+              for spec in build_episode_specs(protocol, study):
+                  agents = {
+                      agent_id: ModelAgent(
+                          agent_id=agent_id,
+                          principal_id=principal_for(spec.scenario, agent_id),
+                          provider=provider,
+                          model=model,
+                      )
+                      for agent_id, model in spec.model_map.items()
+                  }
+                  try:
+                      if study == 'commons_salience':
+                          result = QuotaSalienceEnvironment(
+                              spec.scenario,
+                              CommonsRegime(spec.governance),
+                          ).run(agents, model_name=spec.composition_name)
+                      else:
+                          result = RecoverableDelegationEnvironment(
+                              spec.scenario,
+                              GovernanceRegime(spec.governance),
+                              study=study,
+                              max_actions=protocol.max_delegation_actions,
+                              model_composition=spec.composition_name,
+                          ).run(agents)
+                      responses = [r for agent in agents.values() for r in agent.responses]
+                      calls += len(responses)
+                      calls_by_model.update(r.model for r in responses)
+                      complete.append({
+                          'study': study,
+                          'scenario_id': spec.scenario_id,
+                          'governance': spec.governance,
+                          'model_composition': spec.composition_name,
+                          'model_calls': len(responses),
+                          'result_type': type(result).__name__,
+                      })
+                  except BudgetExceeded:
+                      responses = [r for agent in agents.values() for r in agent.responses]
+                      calls += len(responses)
+                      calls_by_model.update(r.model for r in responses)
+                      missing.append({
+                          'study': study,
+                          'scenario_id': spec.scenario_id,
+                          'governance': spec.governance,
+                          'model_composition': spec.composition_name,
+                          'cached_calls_before_miss': len(responses),
+                      })
+
+          expected = 5280
+          by_study_complete = Counter(item['study'] for item in complete)
+          by_study_missing = Counter(item['study'] for item in missing)
+          by_model_missing = Counter(item['model_composition'] for item in missing)
+          summary = {
+              'protocol_version': protocol.protocol_version,
+              'study_fingerprint': protocol.study_fingerprint(),
+              'design_digest': design_digest(),
+              'expected_episodes': expected,
+              'cache_complete_episodes': len(complete),
+              'episodes_requiring_at_least_one_uncached_request': len(missing),
+              'complete_by_study': dict(sorted(by_study_complete.items())),
+              'missing_by_study': dict(sorted(by_study_missing.items())),
+              'missing_by_model_or_composition': dict(sorted(by_model_missing.items())),
+              'cached_model_calls_replayed': calls,
+              'cached_calls_by_model': dict(sorted(calls_by_model.items())),
+              'network_calls': 0,
+              'provider_spend_usd': budget.spent_usd,
+          }
+          Path('recovery/cache-audit-summary.json').write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          Path('recovery/cache-audit-missing.json').write_text(
+              json.dumps(missing, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          print(json.dumps(summary, indent=2))
+          if len(complete) == expected:
+              print('CACHE_RECOVERY_COMPLETE=true')
+          else:
+              print('CACHE_RECOVERY_COMPLETE=false')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polis-v207-cache-recovery-audit
+          path: recovery/
+          retention-days: 90
