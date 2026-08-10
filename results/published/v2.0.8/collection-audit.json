@@ -1,0 +1,71 @@
+{
+  "counts_by_study": {
+    "commons_salience": 960,
+    "delegation_main": 2304,
+    "frontier": 288,
+    "heterogeneous": 576,
+    "wording_robustness": 1152
+  },
+  "duplicate_episode_keys": 0,
+  "expected_counts_by_study": {
+    "commons_salience": 960,
+    "delegation_main": 2304,
+    "frontier": 288,
+    "heterogeneous": 576,
+    "wording_robustness": 1152
+  },
+  "expected_episodes": 5280,
+  "fingerprints": [
+    "f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3"
+  ],
+  "head_sha": "4431fa5ceb5f9700cf9a650dba2d0478ea08c267",
+  "observed_episodes": 5280,
+  "protocol_versions": [
+    "2.0.8"
+  ],
+  "source_jsonl_files": [
+    "combined/polis-v208-final-batch-0/polis-v208-final-commons_salience-b0of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-0/polis-v208-final-delegation_main-b0of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-0/polis-v208-final-frontier-b0of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-0/polis-v208-final-heterogeneous-b0of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-0/polis-v208-final-wording_robustness-b0of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-1/polis-v208-final-commons_salience-b1of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-1/polis-v208-final-delegation_main-b1of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-1/polis-v208-final-frontier-b1of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-1/polis-v208-final-heterogeneous-b1of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-1/polis-v208-final-wording_robustness-b1of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-2/polis-v208-final-commons_salience-b2of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-2/polis-v208-final-delegation_main-b2of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-2/polis-v208-final-frontier-b2of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-2/polis-v208-final-heterogeneous-b2of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-2/polis-v208-final-wording_robustness-b2of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-3/polis-v208-final-commons_salience-b3of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-3/polis-v208-final-delegation_main-b3of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-3/polis-v208-final-frontier-b3of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-3/polis-v208-final-heterogeneous-b3of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-3/polis-v208-final-wording_robustness-b3of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-4/polis-v208-final-commons_salience-b4of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-4/polis-v208-final-delegation_main-b4of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-4/polis-v208-final-frontier-b4of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-4/polis-v208-final-heterogeneous-b4of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-4/polis-v208-final-wording_robustness-b4of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-5/polis-v208-final-commons_salience-b5of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-5/polis-v208-final-delegation_main-b5of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-5/polis-v208-final-frontier-b5of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-5/polis-v208-final-heterogeneous-b5of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-5/polis-v208-final-wording_robustness-b5of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-6/polis-v208-final-commons_salience-b6of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-6/polis-v208-final-delegation_main-b6of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-6/polis-v208-final-frontier-b6of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-6/polis-v208-final-heterogeneous-b6of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-6/polis-v208-final-wording_robustness-b6of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-7/polis-v208-final-commons_salience-b7of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-7/polis-v208-final-delegation_main-b7of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-7/polis-v208-final-frontier-b7of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-7/polis-v208-final-heterogeneous-b7of8-run31359824031.jsonl",
+    "combined/polis-v208-final-batch-7/polis-v208-final-wording_robustness-b7of8-run31359824031.jsonl"
+  ],
+  "unexpected_models": [],
+  "unique_episode_keys": 5280,
+  "workflow_run_id": "31359824031"
+}
