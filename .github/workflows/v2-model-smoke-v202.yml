@@ -1,71 +1,15 @@
-name: POLIS v2.0.3 seven-model endpoint smoke
+name: POLIS historical v2.0.3 model smoke sealed
 
 on:
   workflow_dispatch:
 
 jobs:
-  smoke:
+  sealed:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        model:
-          - google/gemini-2.5-flash-lite
-          - mistralai/mistral-small-2603
-          - openai/gpt-4.1-mini
-          - deepseek/deepseek-v4-flash
-          - qwen/qwen3-235b-a22b-2507
-          - anthropic/claude-sonnet-4.5
-          - openai/gpt-5-mini
-    env:
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install POLIS
-        run: pip install -e ".[dev]"
-      - name: Verify secret
-        run: |
-          python - <<'PY'
-          import os
-          if not os.getenv('OPENROUTER_API_KEY'):
-              raise SystemExit('OPENROUTER_API_KEY repository secret is not configured')
-          print('Secret configured; value is not printed.')
-          PY
-      - name: One production structured-output request
-        run: |
-          python - <<'PY'
-          from polis.v1.actions import ActionType, Observation
-          from polis.v1.providers.budget import BudgetTracker
-          from polis.v1.providers.cache import FileResponseCache
-          from polis.v1.providers.openrouter import OpenRouterProvider
-
-          model = "${{ matrix.model }}"
-          provider = OpenRouterProvider(
-              cache=FileResponseCache('/tmp/polis-smoke-cache'),
-              budget=BudgetTracker(max_cost_usd=0.30, ledger_path='/tmp/polis-smoke-ledger.jsonl', reserve_per_request_usd=0.01),
-              max_tokens=512,
-              temperature=0.0,
-          )
-          observation = Observation(
-              environment='compatibility_smoke',
-              episode_id='non-experimental-v203-smoke',
-              round_index=1,
-              agent_id='agent_a',
-              principal_id='principal_a',
-              goal='Request exactly 7 resource units for this technical interface check.',
-              institution='none',
-              public_state={'capacity': 100},
-              private_state={'need': 7},
-              available_actions=[ActionType.REQUEST_RESOURCE],
-          )
-          result = provider.act(observation, model)
-          if result.action.action != ActionType.REQUEST_RESOURCE:
-              raise SystemExit(f'Endpoint returned schema-valid but unexpected smoke action: {result.action.action}')
-          print('PASS', model, result.action.model_dump(mode='json'))
-          PY
+      - run: |
+          echo "Historical POLIS v2.0.3 paid endpoint smoke is permanently sealed."
+          echo "The canonical confirmatory dataset is POLIS v2.0.8, workflow run 31359824031."
+          echo "This workflow makes no provider calls."
