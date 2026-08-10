@@ -1,163 +1,93 @@
-# POLIS v2 execution incident record
+# POLIS v2 Execution Incident and Compatibility Record
 
-Date: 2026-08-10 IST
+Date: 2026-08-10
 
-## Scope
+This document records technical execution failures and compatibility repairs separately from scientific outcomes. Historical technical runs are not silently pooled into the final v2.0.8 episode-level inferential dataset.
 
-This note is part of the protocol audit trail and was updated before scientific outcome
-analysis of the final confirmatory dataset. It records two excluded v2.0.2 technical
-launches, the technical corrections they motivated, the v2.0.3 model-panel refreeze, and
-the inclusion rule fixed before the final run.
+## Scientific invariants
 
-No treatment effect, headline outcome, inferential table, figure, or scientific comparison
-from either excluded run was inspected before these rules were fixed. Inspection was limited
-to workflow status, exception traces, episode/manifests counts, cache counts, model IDs,
-provider metadata, and spend ledgers.
+Across the execution-repair sequence, POLIS preserved the core research question, deterministic governance mechanisms, fresh scenario universe, endpoint definitions, and preregistered analysis families. Any technical change that affected an executable model endpoint or protocol interface received a new protocol version/fingerprint rather than being hidden under an old freeze.
 
-## Scientific design that did not change
+## Excluded v2.0.2 technical launch 1
 
-The scientific design remained unchanged throughout the execution repair:
+Workflow run `31337384458`, execution SHA `d55b82e7dbfa01d139daa21a7021e3b270a796e1`.
 
-- planned episode count: 5,280
-- scenario universe and scenario texts
-- governance regimes
-- repetitions
-- random seed
-- environment mechanics
-- outcome definitions
-- metrics
-- preregistered statistical analyses
-- 512-token structured-action output ceiling
+The run exposed two interface failures. Some structurally valid model actions had a free-text `justification` longer than the local 500-character representation limit, and a Qwen endpoint returned empty structured output after reaching the bounded output budget.
 
-The unchanged scenario/design digest is:
+The justification fix is deterministic metadata normalization only. If the provider returns more than 500 characters, the stored action representation is truncated while full raw provider text remains retained. Justification does not drive permissions, state transitions, task completion, violation labels, or welfare. No action-bearing field is repaired.
 
-`6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964`
+## Excluded v2.0.2 technical launch 2
 
-## Excluded technical launch 1
+Workflow run `31337778389`, execution SHA `06fa86735355dd1756a8a1c34671c44da1eb39e1`.
 
-Workflow run: `31337384458`
+The recurring blocker was the reasoning-enabled Qwen3.7 Plus endpoint consuming its bounded output allowance without returning a usable structured action. Rather than silently alter its reasoning budget after collection began, the endpoint was replaced under a new protocol version and passed the common compatibility gate.
 
-Execution SHA: `d55b82e7dbfa01d139daa21a7021e3b270a796e1`
+## Later endpoint verification and refreezes
 
-Frozen protocol: `2.0.2`
+Subsequent technical validation established the final executable panel and provider controls. Historical v2.0.1 through v2.0.7 notes remain in the repository as an audit trail and should not be read as the current protocol.
 
-Several batches terminated when an otherwise structurally valid action contained a
-free-text `justification` longer than the local `Action` representation's 500-character
-maximum. The portable provider wire schema intentionally omits validation keywords that are
-not accepted consistently by the selected providers, so provider-side structured output
-could not enforce this local metadata bound.
+The final v2.0.8 panel is:
 
-Observed exception class:
+- `google/gemini-2.5-flash-lite`
+- `mistralai/mistral-small-2603`
+- `openai/gpt-4.1-mini`
+- `deepseek/deepseek-v3.2`, reasoning disabled
+- `qwen/qwen3-235b-a22b-2507`
+- `anthropic/claude-sonnet-4.5`
+- `openai/gpt-4.1`
 
-`ValidationError: justification: String should have at most 500 characters`
+Final frozen identifiers:
 
-A separate batch also exposed an empty structured action from `qwen/qwen3.7-plus` with
-`finish_reason='length'`.
+- protocol `2.0.8`
+- config digest `f72f6d683b88d1f11b7ec1d840413f805a619a5433ce431c445b16831aa3346b`
+- design digest `c5d6a750c495d14d0d745a9ee317cd40fa20ecd5c2e3e735fd74b195363182e8`
+- fingerprint `f169dc157fd6f31d0f0ce0a76a0c51049f9b0a28eba08fc3201b616e1ce001e3`
 
-### Non-outcome metadata correction
+## v2.0.7 technical collection and cache admission
 
-Provider parsing now applies one deterministic normalization before Pydantic validation:
-if and only if `justification` is a string longer than 500 characters, the stored action
-representation is truncated to the already-defined 500-character local limit.
+A later technical collection produced provider responses that could potentially be reused, but the final v2.0.8 analysis does not simply treat those earlier episode records as the final dataset.
 
-`justification` is explanatory metadata. Institutions, environment transitions, action
-admissibility, task completion, policy-violation logic, welfare calculations, and
-statistical metrics do not consume it. The complete provider text remains in
-`ModelResponse.raw_text`, and normalization is explicitly marked in response metadata.
+Before the final run, a zero-provider-call cache audit revalidated exact request/response objects under the v2.0.8 parser and final model panel. It:
 
-No action-bearing field is repaired. In particular, action enum, amount validation,
-targets, artifact identifiers, transformations, governance semantics, and environment
-validation are unchanged. Semantically invalid action fields still fail validation.
+- admitted 3,596 exact response objects
+- excluded 43 requests associated with obsolete `deepseek-v4-flash`
+- rejected one legacy response that failed final semantic validation
+- made zero provider calls
 
-Provider patch commit: `8f521dad4881a3b752b19c11bfb96f8d60358d2d`
+Admission depended on exact request identity and v2.0.8 interface/semantic validity, not on scientific outcomes. The canonical final execution then reconstructed all 5,280 v2.0.8 episode records under the frozen environment and fingerprint.
 
-Validation tests commit: `06fa86735355dd1756a8a1c34671c44da1eb39e1`
+## Canonical v2.0.8 execution
 
-## Excluded technical launch 2
+Workflow run `31359824031`, execution SHA `4431fa5ceb5f9700cf9a650dba2d0478ea08c267`.
 
-Workflow run: `31337778389`
+The pre-analysis gate verified:
 
-Execution SHA: `06fa86735355dd1756a8a1c34671c44da1eb39e1`
+- 5,280 expected episodes
+- 5,280 observed episodes
+- 5,280 unique keys
+- zero duplicate keys
+- exact per-study counts
+- one v2.0.8 fingerprint throughout
+- no unexpected model IDs
 
-Frozen protocol: `2.0.2`
+Final provider/interface diagnostics:
 
-This launch started from scratch with deterministic justification canonicalization enabled.
-All four live batches ultimately failed. The recurring blocking failure was the Qwen
-endpoint returning no structured action after consuming the 512-token output allowance:
+- 10,720 model-call records
+- 97 deterministic justification truncations
+- 9 filled missing nullable fields
+- 6 dropped extra non-action fields
+- zero routed-model identity mismatches
+- 48 semantic invalid actions handled by frozen environment semantics
+- zero retry events
 
-`RuntimeError: OpenRouter returned an empty structured action for model='qwen/qwen3.7-plus', finish_reason='length'`
+The full dataset represents $3.023621 in provider-reported response cost. The incremental spend for the final run was $1.967216 because audited exact responses were reused.
 
-Because Qwen3.7 Plus is a reasoning-enabled endpoint, its internal reasoning competes with
-the structured action for the same bounded output budget. Rather than introduce an
-endpoint-specific reasoning setting after collection had begun, POLIS replaced this one
-model with a non-thinking Qwen-family instruction endpoint and refroze the panel.
+## Canonical artifact
 
-## v2.0.3 endpoint replacement and refreeze
+Artifact ID `9053667558`, name `polis-v208-final-complete-31359824031`, SHA-256 `9f0eb0db21e32a0e72f266069634899af5814589608426504acbce9414c3064c`.
 
-Only the Qwen endpoint changed:
+The final GitHub release should preserve this bundle as the permanent source archive.
 
-- removed: `qwen/qwen3.7-plus`
-- added: `qwen/qwen3-235b-a22b-2507`
-- panel label: `Qwen3 235B A22B Instruct 2507`
+## Post-run sealing
 
-The other six frozen endpoints are unchanged:
-
-1. `google/gemini-2.5-flash-lite`
-2. `mistralai/mistral-small-2603`
-3. `openai/gpt-4.1-mini`
-4. `deepseek/deepseek-v4-flash`
-5. `anthropic/claude-sonnet-4.5`
-6. `openai/gpt-5-mini`
-
-The replacement Qwen endpoint and all six retained endpoints passed the same production
-structured-action smoke gate in workflow run `31338155595` before confirmatory collection.
-
-The refrozen v2.0.3 identifiers are:
-
-- protocol version: `2.0.3`
-- config digest: `28c392732c6f3b9bd122d91d3397f87bf2ecaf21e7a832c588f4dff652b7260c`
-- design digest: `6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964`
-- study fingerprint: `26dbae58963f556f048e91fb30ce2130f6bfe1cadbced258e1fb38caec9d40a8`
-
-The unchanged design digest provides a machine-checkable record that the scenario and
-experimental design were not tuned in response to the technical failures.
-
-The v2.0.3 preflight in workflow run `31338255907` independently reproduced the hashes and
-all five frozen study sizes before launch.
-
-## Dataset inclusion rule fixed before analysis
-
-Both v2.0.2 runs are excluded technical pre-runs:
-
-- `31337384458`
-- `31337778389`
-
-**No episode from either run may enter any final POLIS v2 inferential dataset, even if that
-episode completed successfully.** The exclusion is run-level, not outcome-level, which
-prevents cherry-picking successful records across execution interfaces.
-
-The only dataset eligible for the final v2 analysis is a fresh v2.0.3 execution that starts
-all 5,280 frozen completion keys from scratch under fingerprint
-`26dbae58963f556f048e91fb30ce2130f6bfe1cadbced258e1fb38caec9d40a8` and passes every
-completeness, uniqueness, manifest, fingerprint, and analysis gate.
-
-## Orchestration hardening
-
-The full confirmatory workflow is explicit-launch only after freeze. Automatic endpoint
-smoke execution is also disabled after the green seven-model gate. This prevents ordinary
-code, documentation, or result commits from silently creating additional paid samples.
-
-## Final reporting obligations
-
-The final v2 methods and reproducibility material must disclose:
-
-1. both excluded technical launches and their run IDs,
-2. the justification-length failure and deterministic non-outcome normalization,
-3. the Qwen3.7 Plus output-length failure,
-4. the v2.0.3 Qwen endpoint replacement and seven-model smoke gate,
-5. the old and new fingerprints and unchanged design digest,
-6. the run-level exclusion rule,
-7. the final clean execution SHA and workflow run ID,
-8. the number of normalized justifications in the final sample,
-9. provider-reported token and cost totals,
-10. all final completeness and fingerprint checks.
+The final paid collector, legacy paid recovery workflows, and historical paid endpoint smoke workflows are sealed after successful completion. They make no provider calls in the release branch.
