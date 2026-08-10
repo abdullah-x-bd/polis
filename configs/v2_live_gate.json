@@ -1,6 +1,6 @@
 {
-  "armed": true,
-  "status": "armed_final_recovery",
+  "armed": false,
+  "status": "aborted_v207_model_panel_mismatch",
   "protocol_version": "2.0.7",
   "config_digest": "05548c19126ebf1a71262ecd7675404d35b7c3f003f8eef19ef0ae3c827b756f",
   "design_digest": "6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964",
@@ -10,6 +10,6 @@
   "recovery_cache_run_id": "31354324514",
   "recovery_cache_objects": 3285,
   "recovery_cache_objects_valid_under_v207": 3284,
-  "failed_execution_run_id": "31353948708",
-  "note": "One-shot final recovery execution after user replenished OpenRouter credits. Only exact-request cached responses revalidated under the frozen v2.0.7 parser may be replayed. One obsolete repaired cache object is excluded."
+  "failed_execution_run_id": "31357100158",
+  "failure_reason": "Frozen v2.0.7 cheap-model panel specifies deepseek/deepseek-v3.2, but HETEROGENEOUS_COMPOSITIONS still hard-coded deepseek/deepseek-v4-flash. The stale v4 model repeatedly returned empty finish_reason=length responses. v2.0.7 is excluded as a technical collection; final confirmatory execution will use a corrected, newly fingerprinted v2.0.8 protocol."
 }
