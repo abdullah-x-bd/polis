@@ -1,13 +1,15 @@
 {
-  "armed": false,
-  "status": "cache_recovery",
+  "armed": true,
+  "status": "armed_final_recovery",
   "protocol_version": "2.0.7",
   "config_digest": "05548c19126ebf1a71262ecd7675404d35b7c3f003f8eef19ef0ae3c827b756f",
   "design_digest": "6efba6e49955923ce13d70e7e4e672f3173a83c1bed0522b7eae65452023b964",
   "study_fingerprint": "911c55b1d71e29b9ef1d1addc7131a4edbe2ecbb4a63fd87a7f423009a0686be",
   "expected_episodes": 5280,
-  "max_total_cost_usd": 2.2,
-  "cache_seed_source_run": "31340543634",
+  "max_total_cost_usd": 4.6,
+  "recovery_cache_run_id": "31354324514",
+  "recovery_cache_objects": 3285,
+  "recovery_cache_objects_valid_under_v207": 3284,
   "failed_execution_run_id": "31353948708",
-  "failure_reason": "OpenRouter returned HTTP 402 insufficient credits on the first uncached requests. Paid execution is disarmed while exact-request caches from excluded technical runs are audited for complete zero-spend recovery."
+  "note": "One-shot final recovery execution after user replenished OpenRouter credits. Only exact-request cached responses revalidated under the frozen v2.0.7 parser may be replayed. One obsolete repaired cache object is excluded."
 }
